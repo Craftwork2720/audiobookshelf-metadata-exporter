@@ -1,10 +1,113 @@
 from flask import Flask, render_template_string, request, flash, redirect, url_for
 import abs_export
 import os
+import re
+# NOWY IMPORT: Dodajemy difflib do porównywania podobieństwa tekstów
+import difflib
 
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_dla_flash_messages' # Required for flash messages
 
+def parse_folder_name(folder_name):
+    """
+    Parsuje nazwę folderu w formacie: "Autor1 , Autor2 - Tytuł (Rok) [audiobook PL]"
+    Zwraca tuple (authors_list, title, year) lub (None, None, None) jeśli nie można sparsować
+    """
+    # Wzorzec: autorzy - tytuł (rok) [opcjonalne dodatkowe info]
+    # Zmieniono wzorzec, aby opcjonalny tekst na końcu nie musiał być w nawiasach
+    pattern = r'^(.+?)\s*-\s*(.+?)\s*\((\d{4})\)(.*)$'
+    match = re.match(pattern, folder_name.strip())
+    
+    if match:
+        authors_str, title, year, _ = match.groups()
+        # Podziel autorów po przecinku i oczyść spacje
+        authors = [author.strip() for author in authors_str.split(',')]
+        return authors, title.strip(), year
+    
+    return None, None, None
+
+def normalize_text(text):
+    """Normalizuje tekst do porównania - usuwa diakrytyki, zmienia na małe litery"""
+    if not text:
+        return ""
+    
+    # Podstawowe mapowanie polskich znaków
+    replacements = {
+        'ą': 'a', 'ć': 'c', 'ę': 'e', 'ł': 'l', 'ń': 'n', 'ó': 'o', 'ś': 's', 'ź': 'z', 'ż': 'z',
+        'Ą': 'a', 'Ć': 'c', 'Ę': 'e', 'Ł': 'l', 'Ń': 'n', 'Ó': 'o', 'Ś': 's', 'Ź': 'z', 'Ż': 'z'
+    }
+    
+    normalized = text.lower()
+    for old, new in replacements.items():
+        normalized = normalized.replace(old, new)
+    
+    return normalized
+
+# ZMODYFIKOWANA FUNKCJA PORÓWNANIA
+def compare_metadata_with_folder(title, author, folder_path):
+    """
+    Porównuje metadane z nazwą folderu z większą elastycznością.
+    Zwraca dict z wynikami porównania.
+    """
+    if not folder_path:
+        return {
+            'folder_parsed': False, 'match_status': 'no_path', 'folder_name': '',
+            'parsed_title': '', 'parsed_authors': []
+        }
+    
+    folder_name = os.path.basename(folder_path)
+    parsed_authors, parsed_title, parsed_year = parse_folder_name(folder_name)
+    
+    if not parsed_title or not parsed_authors:
+        return {
+            'folder_parsed': False, 'match_status': 'parse_failed', 'folder_name': folder_name,
+            'parsed_title': '', 'parsed_authors': []
+        }
+    
+    # --- NOWA, ELASTYCZNA LOGIKA PORÓWNANIA ---
+
+    # 1. Porównanie tytułów za pomocą SequenceMatcher
+    normalized_title = normalize_text(title)
+    normalized_parsed_title = normalize_text(parsed_title)
+    # Sprawdź podobieństwo tytułów. Uznajemy za dopasowanie, jeśli krótszy tytuł jest zawarty w dłuższym,
+    # lub jeśli ich ogólne podobieństwo (ratio) jest wystarczająco wysokie (np. 0.7)
+    title_similarity = difflib.SequenceMatcher(None, normalized_title, normalized_parsed_title).ratio()
+    
+    title_match = (normalized_parsed_title in normalized_title or 
+                   normalized_title in normalized_parsed_title or 
+                   title_similarity > 0.7)
+
+    # 2. Bardziej elastyczne porównanie autorów
+    # Dzielimy autorów z metadanych (na wypadek gdyby było ich kilku)
+    metadata_authors = [normalize_text(a) for a in author.split(',')]
+    normalized_parsed_authors = [normalize_text(a) for a in parsed_authors]
+    
+    authors_match = False
+    # Sprawdzamy, czy jakikolwiek autor z metadanych pasuje do jakiegokolwiek autora z folderu
+    for meta_author in metadata_authors:
+        for folder_author in normalized_parsed_authors:
+            if meta_author in folder_author or folder_author in meta_author:
+                authors_match = True
+                break
+        if authors_match:
+            break
+            
+    # Określ status dopasowania
+    if title_match and authors_match:
+        match_status = 'full_match'
+    elif title_match:
+        match_status = 'title_only'
+    elif authors_match:
+        match_status = 'authors_only'
+    else:
+        match_status = 'no_match'
+    
+    return {
+        'folder_parsed': True, 'match_status': match_status, 'folder_name': folder_name,
+        'parsed_title': parsed_title, 'parsed_authors': parsed_authors
+    }
+
+# ZMODYFIKOWANY TEMPLATE - POPRAWIONE KOLORY W TABELI WYNIKÓW
 TEMPLATE = """
 <!doctype html>
 <html lang="pl">
@@ -32,8 +135,6 @@ TEMPLATE = """
         .form-group label { display: block; margin-bottom: 5px; }
         .form-group input[type="text"] { width: calc(100% - 22px); }
         #search-input { margin-bottom: 10px; }
-
-        /* Table specific styles */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -48,17 +149,23 @@ TEMPLATE = """
             background-color: #f2f2f2;
             font-weight: bold;
         }
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
-        /* Status colors */
-        .status-copied { color: green; } /* New: indicates successful copy */
-        .status-success { color: green; } /* General success */
-        .status-error { color: red; font-weight: bold; }
-        .status-missing { color: orange; } /* Missing source file */
-        .status-exists { color: blue; } /* File already exists at destination */
-        .status-skipped { color: gray; } /* Item skipped due to no source files */
-        .status-info { color: #0056b3; } /* General info messages */
+        
+        /* Kolory dopasowania w liście GŁÓWNEJ */
+        .match-full { border-left-color: #28a745; }
+        .match-title { border-left-color: #ffc107; }
+        .match-authors { border-left-color: #17a2b8; }
+        .match-none { border-left-color: #dc3545; }
+        .match-error { border-left-color: #6c757d; }
+        
+        /* --- POPRAWIONE STYLE DLA TABELI WYNIKÓW --- */
+        /* Zamiast samego koloru tekstu, ustawiamy tło komórki */
+        .status-success { background-color: #d4edda; color: #155724; }
+        .status-copied { background-color: #d4edda; color: #155724; }
+        .status-error { background-color: #f8d7da; color: #721c24; font-weight: bold; }
+        .status-missing { background-color: #fff3cd; color: #856404; }
+        .status-exists { background-color: #d1ecf1; color: #0c5460; }
+        .status-skipped { background-color: #e2e3e5; color: #383d41; }
+        .status-info { background-color: #cce5ff; color: #004085; }
 
         .summary-box {
             background-color: #e9f7ef;
@@ -71,6 +178,39 @@ TEMPLATE = """
         .summary-box p {
             margin: 0 0 5px 0;
             font-weight: bold;
+        }
+        
+        .item-entry {
+            border-left: 4px solid #ccc;
+            padding-left: 10px;
+            margin-bottom: 10px;
+        }
+        .match-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        .filter-options {
+            margin-bottom: 15px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .filter-options label {
+            margin-right: 15px;
+            font-weight: normal;
+        }
+        .legend {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .legend-item { display: inline-block; margin-right: 20px; margin-bottom: 5px; }
+        .legend-color {
+            display: inline-block; width: 20px; height: 15px;
+            border-radius: 3px; margin-right: 5px; vertical-align: middle;
         }
     </style>
 </head>
@@ -110,12 +250,37 @@ TEMPLATE = """
     <small>Okładki i metadane będą szukane w <code>{{abs_media_root}}/[ID_z_CSV]/</code>.</small>
   </div>
   
+  <div class="form-group">
+    <input type="checkbox" name="compare_folders" id="compare_folders" value="1" 
+           {% if compare_folders %}checked{% endif %} onchange="this.form.submit()">
+    <label for="compare_folders">Porównaj metadane z nazwami folderów</label>
+  </div>
+  
   <h2>Wybierz pozycje do eksportu ({{ items|length }} znaleziono):</h2>
   
   <div class="form-group">
     <label for="search-input">Szukaj pozycji:</label>
     <input type="text" id="search-input" placeholder="Wpisz tytuł lub autora..." onkeyup="filterItems()">
   </div>
+  
+  {% if compare_folders %}
+  <div class="filter-options">
+    <label><input type="checkbox" id="filter-full" checked onchange="filterByMatch()"> Pełne dopasowanie</label>
+    <label><input type="checkbox" id="filter-title" checked onchange="filterByMatch()"> Tylko tytuł</label>
+    <label><input type="checkbox" id="filter-authors" checked onchange="filterByMatch()"> Tylko autorzy</label>
+    <label><input type="checkbox" id="filter-none" checked onchange="filterByMatch()"> Brak dopasowania</label>
+    <label><input type="checkbox" id="filter-error" checked onchange="filterByMatch()"> Błąd parsowania</label>
+  </div>
+  
+  <div class="legend">
+    <strong>Legenda kolorów:</strong><br>
+    <div class="legend-item"><span class="legend-color" style="border: 2px solid #28a745;"></span>Pełne dopasowanie</div>
+    <div class="legend-item"><span class="legend-color" style="border: 2px solid #ffc107;"></span>Tylko tytuł</div>
+    <div class="legend-item"><span class="legend-color" style="border: 2px solid #17a2b8;"></span>Tylko autorzy</div>
+    <div class="legend-item"><span class="legend-color" style="border: 2px solid #dc3545;"></span>Brak dopasowania</div>
+    <div class="legend-item"><span class="legend-color" style="border: 2px solid #6c757d;"></span>Błąd parsowania</div>
+  </div>
+  {% endif %}
 
   <div class="form-group">
     <button type="button" onclick="selectAllItems()">Zaznacz wszystkie widoczne</button>
@@ -123,14 +288,38 @@ TEMPLATE = """
   </div>
 
   <div class="item-list" id="item-list">
-  {% for item_id, path, title, author in items %} {# Zmieniono relPath na path #}
-    <div class="item-entry" data-title="{{ title|lower }}" data-author="{{ author|lower }}">
+  {% for item_id, path, title, author, comparison in items %}
+    <div class="item-entry match-{{ comparison.match_status if comparison else 'none' }}" 
+         data-title="{{ title|lower }}" 
+         data-author="{{ author|lower }}"
+         data-match="{{ comparison.match_status if comparison else 'none' }}">
       <input type="checkbox" name="items" value="{{ item_id }}" id="item-{{ item_id }}">
-      <label for="item-{{ item_id }}">{{ title }} – {{ author }} (ID: {{ item_id }}, Ścieżka: {{ path }})</label> {# Zmieniono Ścieżka rel. na Ścieżka #}
+      <label for="item-{{ item_id }}">
+        <strong>{{ title }}</strong> – {{ author }} (ID: {{ item_id }})
+        <br><small>Ścieżka: {{ path }}</small>
+        {% if comparison and comparison.folder_parsed %}
+          <div class="match-info">
+            <strong>Folder:</strong> {{ comparison.folder_name }}<br>
+            <strong>Sparsowane:</strong> {{ comparison.parsed_title }} – {{ comparison.parsed_authors|join(', ') }}<br>
+            <strong>Dopasowanie:</strong> 
+            {% if comparison.match_status == 'full_match' %}✓ Pełne dopasowanie
+            {% elif comparison.match_status == 'title_only' %}⚠ Tylko tytuł
+            {% elif comparison.match_status == 'authors_only' %}⚠ Tylko autorzy
+            {% else %}✗ Brak dopasowania
+            {% endif %}
+          </div>
+        {% elif comparison and not comparison.folder_parsed %}
+          <div class="match-info">
+            <strong>Folder:</strong> {{ comparison.folder_name }}<br>
+            <strong>Status:</strong> Nie można sparsować nazwy folderu
+          </div>
+        {% endif %}
+      </label>
     </div>
   {% endfor %}
   </div>
   <input type="hidden" name="library" value="{{ selected_lib }}">
+  <input type="hidden" name="compare_folders" value="{{ '1' if compare_folders else '0' }}">
   <button type="submit" style="margin-top: 15px;">Eksportuj zaznaczone</button>
 </form>
 {% endif %}
@@ -171,7 +360,6 @@ TEMPLATE = """
       <p>Liczba skopiowanych plików cover.jpg: {{ counts.cover_total }}</p>
     </div>
   {% endif %}
-
 {% endif %}
 
 <script>
@@ -201,8 +389,11 @@ function filterItems() {
     itemEntries.forEach(function(entry) {
         var title = entry.getAttribute('data-title');
         var author = entry.getAttribute('data-author');
+        var matchFilter = checkMatchFilter(entry);
         
-        if (title.includes(filter) || author.includes(filter)) {
+        var textMatch = title.includes(filter) || author.includes(filter);
+        
+        if (textMatch && matchFilter) {
             entry.style.display = '';
         } else {
             entry.style.display = 'none';
@@ -210,13 +401,42 @@ function filterItems() {
     });
 }
 
+function checkMatchFilter(entry) {
+    var matchType = entry.getAttribute('data-match');
+    
+    var filterFull = document.getElementById('filter-full');
+    var filterTitle = document.getElementById('filter-title');
+    var filterAuthors = document.getElementById('filter-authors');
+    var filterNone = document.getElementById('filter-none');
+    var filterError = document.getElementById('filter-error');
+    
+    if (!filterFull) return true; // Jeśli nie ma filtrów dopasowania, pokaż wszystko
+    
+    switch(matchType) {
+        case 'full_match': return filterFull.checked;
+        case 'title_only': return filterTitle.checked;
+        case 'authors_only': return filterAuthors.checked;
+        case 'no_match': return filterNone.checked;
+        case 'parse_failed':
+        case 'no_path': return filterError.checked;
+        default: return true;
+    }
+}
+
+function filterByMatch() {
+    filterItems();
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     var searchInput = document.getElementById('search-input');
     if (searchInput && searchInput.value) {
         filterItems();
     }
+    // Upewnij się, że filtrowanie po dopasowaniu jest uruchamiane przy starcie, jeśli filtry są widoczne
+    if(document.getElementById('filter-full')) {
+        filterByMatch();
+    }
 });
-
 </script>
 </body>
 </html>
@@ -229,6 +449,8 @@ def index():
         flash("Nie można załadować nazw bibliotek. Upewnij się, że pliki CSV istnieją i są prawidłowe.", "error")
 
     selected_lib = request.form.get("library") or request.args.get("library")
+    compare_folders = request.form.get("compare_folders") == "1" or request.args.get("compare_folders") == "1"
+    
     items = []
     results = None
     
@@ -237,7 +459,15 @@ def index():
     if selected_lib:
         lib_id = abs_export.get_library_id_by_name(selected_lib)
         if lib_id:
-            items = abs_export.get_items_by_library(lib_id)
+            raw_items = abs_export.get_items_by_library(lib_id)
+            
+            items = []
+            for item in raw_items:
+                item_id, path, title, author = item
+                comparison = None
+                if compare_folders:
+                    comparison = compare_metadata_with_folder(title, author, path)
+                items.append((item_id, path, title, author, comparison))
         else:
             flash(f"Nie znaleziono ID dla biblioteki '{selected_lib}'. Sprawdź nazwę w pliku CSV.", "error")
 
@@ -248,21 +478,23 @@ def index():
                                   results=results,
                                   default_export_path=default_export_path,
                                   abs_media_root=abs_export.ABS_MEDIA_ROOT,
-                                  counts=None)
+                                  counts=None,
+                                  compare_folders=compare_folders)
 
 @app.route("/export", methods=["POST"])
 def export():
     item_ids = request.form.getlist("items")
     selected_lib = request.form.get("library")
     export_path = request.form.get("export_path")
+    compare_folders = request.form.get("compare_folders") == "1"
 
     if not export_path:
         flash("Musisz podać katalog docelowy eksportu.", "error")
-        return redirect(url_for('index', library=selected_lib))
+        return redirect(url_for('index', library=selected_lib, compare_folders=compare_folders))
 
     if not item_ids:
         flash("Nie wybrano żadnych pozycji do eksportu.", "error")
-        return redirect(url_for('index', library=selected_lib))
+        return redirect(url_for('index', library=selected_lib, compare_folders=compare_folders))
 
     if not selected_lib:
         flash("Brak wybranej biblioteki do eksportu.", "error")
@@ -273,18 +505,18 @@ def export():
         flash(f"Nie znaleziono ID dla biblioteki '{selected_lib}'. Eksport niemożliwy.", "error")
         return redirect(url_for('index'))
 
-    all_items = abs_export.get_items_by_library(lib_id)
-    if not all_items:
+    raw_items = abs_export.get_items_by_library(lib_id)
+    if not raw_items:
         flash("Brak pozycji do wyeksportowania w wybranej bibliotece.", "error")
-        return redirect(url_for('index', library=selected_lib))
+        return redirect(url_for('index', library=selected_lib, compare_folders=compare_folders))
 
     item_ids_str = [str(i) for i in item_ids]
-    items_dict = {str(item[0]): item for item in all_items}
+    items_dict = {str(item[0]): item for item in raw_items}
     selected_items = [items_dict[item_id] for item_id in item_ids_str if item_id in items_dict]
 
     if not selected_items:
         flash("Wybrane pozycje nie pasują do pozycji w danych. Eksport niemożliwy.", "error")
-        return redirect(url_for('index', library=selected_lib))
+        return redirect(url_for('index', library=selected_lib, compare_folders=compare_folders))
 
     results, counts = abs_export.export_items(selected_items, export_path)
     
@@ -295,7 +527,14 @@ def export():
         flash("Eksport zakończony pomyślnie!", "success")
     
     libraries = abs_export.list_library_names()
-    items = abs_export.get_items_by_library(lib_id)
+    
+    items = []
+    for item in raw_items:
+        item_id, path, title, author = item
+        comparison = None
+        if compare_folders:
+            comparison = compare_metadata_with_folder(title, author, path)
+        items.append((item_id, path, title, author, comparison))
 
     return render_template_string(TEMPLATE, 
                                   libraries=libraries, 
@@ -304,7 +543,8 @@ def export():
                                   results=results,
                                   default_export_path=export_path,
                                   abs_media_root=abs_export.ABS_MEDIA_ROOT,
-                                  counts=counts)
+                                  counts=counts,
+                                  compare_folders=compare_folders)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))

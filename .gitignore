@@ -156,5 +156,5 @@ Thumbs.db
 # Docker
 .dockerignore
 Dockerfile
-docker-compose.yml
-docker-compose.yaml
+docker-compose-dev.yml
+docker-compose-dev.yaml

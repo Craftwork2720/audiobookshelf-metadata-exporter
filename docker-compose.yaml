@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  audiobookshelf-exporter:
+    build: .
+    container_name: audiobookshelf-exporter
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./data/csv_db:/abs-data/csv_db:ro"
+      - "./data/items:/media/Audiobooks:ro" 
+      - "./data/exported:/exported_audiobooks:rw"
+      
+    environment:
+      PORT: 8080
+      # You can override default export path here if you want a different default in the UI
+      # ABS_EXPORT_DEFAULT_PATH: "/exported_audiobooks"
+    restart: unless-stopped

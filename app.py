@@ -10,20 +10,31 @@ app.secret_key = 'super_secret_key_dla_flash_messages' # Required for flash mess
 
 def parse_folder_name(folder_name):
     """
-    Parsuje nazwę folderu w formacie: "Autor1 , Autor2 - Tytuł (Rok) [audiobook PL]"
-    Zwraca tuple (authors_list, title, year) lub (None, None, None) jeśli nie można sparsować
+    Parsuje nazwę folderu w formacie: 'Autor - Tytuł' z dopiskami typu 'czyta', 'tom', '[audiobook]'
     """
-    # Wzorzec: autorzy - tytuł (rok) [opcjonalne dodatkowe info]
-    # Zmieniono wzorzec, aby opcjonalny tekst na końcu nie musiał być w nawiasach
-    pattern = r'^(.+?)\s*-\s*(.+?)\s*\((\d{4})\)(.*)$'
-    match = re.match(pattern, folder_name.strip())
-    
+    import re
+
+    # Usuń część po 'czyta ...'
+    cleaned = re.sub(r'czyta .*?(?=\[|$)', '', folder_name, flags=re.IGNORECASE)
+
+    # Usuń nawiasy kwadratowe i ich zawartość, np. [audiobook PL]
+    cleaned = re.sub(r'\[.*?\]', '', cleaned)
+
+    # Usuń dopiski typu 'cykl ...' i 'tom X'
+    cleaned = re.sub(r'(?i)cykl .*?(?= -|$)', '', cleaned)
+    cleaned = re.sub(r'(?i)tom \d+', '', cleaned)
+
+    cleaned = cleaned.strip()
+
+    # Dopasuj: Autor - Tytuł (opcjonalnie z rokiem)
+    pattern = r'^(.+?)\s*-\s*(.+?)(?:\s*\((\d{4})\))?$'
+    match = re.match(pattern, cleaned)
+
     if match:
-        authors_str, title, year, _ = match.groups()
-        # Podziel autorów po przecinku i oczyść spacje
-        authors = [author.strip() for author in authors_str.split(',')]
+        authors_str, title, year = match.groups()
+        authors = [a.strip() for a in authors_str.split(',')]
         return authors, title.strip(), year
-    
+
     return None, None, None
 
 def normalize_text(text):
@@ -49,50 +60,45 @@ def compare_metadata_with_folder(title, author, folder_path):
     Porównuje metadane z nazwą folderu z większą elastycznością.
     Zwraca dict z wynikami porównania.
     """
+    import difflib
     if not folder_path:
         return {
             'folder_parsed': False, 'match_status': 'no_path', 'folder_name': '',
             'parsed_title': '', 'parsed_authors': []
         }
-    
+
     folder_name = os.path.basename(folder_path)
     parsed_authors, parsed_title, parsed_year = parse_folder_name(folder_name)
-    
+
     if not parsed_title or not parsed_authors:
         return {
             'folder_parsed': False, 'match_status': 'parse_failed', 'folder_name': folder_name,
             'parsed_title': '', 'parsed_authors': []
         }
-    
-    # --- NOWA, ELASTYCZNA LOGIKA PORÓWNANIA ---
 
-    # 1. Porównanie tytułów za pomocą SequenceMatcher
+    # Porównanie tytułów
     normalized_title = normalize_text(title)
     normalized_parsed_title = normalize_text(parsed_title)
-    # Sprawdź podobieństwo tytułów. Uznajemy za dopasowanie, jeśli krótszy tytuł jest zawarty w dłuższym,
-    # lub jeśli ich ogólne podobieństwo (ratio) jest wystarczająco wysokie (np. 0.7)
     title_similarity = difflib.SequenceMatcher(None, normalized_title, normalized_parsed_title).ratio()
-    
     title_match = (normalized_parsed_title in normalized_title or 
                    normalized_title in normalized_parsed_title or 
                    title_similarity > 0.7)
 
-    # 2. Bardziej elastyczne porównanie autorów
-    # Dzielimy autorów z metadanych (na wypadek gdyby było ich kilku)
+    # Porównanie autorów z wykorzystaniem podobieństwa tekstu
     metadata_authors = [normalize_text(a) for a in author.split(',')]
     normalized_parsed_authors = [normalize_text(a) for a in parsed_authors]
-    
+
     authors_match = False
-    # Sprawdzamy, czy jakikolwiek autor z metadanych pasuje do jakiegokolwiek autora z folderu
     for meta_author in metadata_authors:
         for folder_author in normalized_parsed_authors:
-            if meta_author in folder_author or folder_author in meta_author:
+            similarity = difflib.SequenceMatcher(None, meta_author, folder_author).ratio()
+            if similarity > 0.75:
                 authors_match = True
                 break
         if authors_match:
             break
-            
-    # Określ status dopasowania
+
+    # Określenie wyniku
     if title_match and authors_match:
         match_status = 'full_match'
     elif title_match:
@@ -101,11 +107,15 @@ def compare_metadata_with_folder(title, author, folder_path):
         match_status = 'authors_only'
     else:
         match_status = 'no_match'
-    
+
     return {
-        'folder_parsed': True, 'match_status': match_status, 'folder_name': folder_name,
-        'parsed_title': parsed_title, 'parsed_authors': parsed_authors
+        'folder_parsed': True,
+        'match_status': match_status,
+        'folder_name': folder_name,
+        'parsed_title': parsed_title,
+        'parsed_authors': parsed_authors
     }
+
 
 # ZMODYFIKOWANY TEMPLATE - POPRAWIONE KOLORY W TABELI WYNIKÓW
 TEMPLATE = """
@@ -234,9 +244,17 @@ TEMPLATE = """
       <option value="">-- wybierz --</option>
       {% for lib in libraries %}
         <option value="{{ lib }}" {% if selected_lib == lib %}selected{% endif %}>{{ lib }}</option>
-    {% endfor %}
+      {% endfor %}
     </select>
   </div>
+
+  <div class="form-group">
+    <input type="checkbox" name="compare_folders" id="compare_folders" value="1" 
+           {% if compare_folders %}checked{% endif %} onchange="this.form.submit()">
+    <label for="compare_folders">Porównaj metadane z nazwami folderów</label>
+  </div>
+
+  <input type="hidden" name="library" value="{{ selected_lib }}">
 </form>
 
 {% if selected_lib and not items %}
@@ -248,12 +266,6 @@ TEMPLATE = """
     <input type="text" id="export_path" name="export_path" value="{{ default_export_path }}" placeholder="np. /exported_audiobooks">
     <small>Pliki zostaną skopiowane do <code>[Katalog docelowy]/[path_z_CSV]</code>.</small><br>
     <small>Okładki i metadane będą szukane w <code>{{abs_media_root}}/[ID_z_CSV]/</code>.</small>
-  </div>
-  
-  <div class="form-group">
-    <input type="checkbox" name="compare_folders" id="compare_folders" value="1" 
-           {% if compare_folders %}checked{% endif %} onchange="this.form.submit()">
-    <label for="compare_folders">Porównaj metadane z nazwami folderów</label>
   </div>
   
   <h2>Wybierz pozycje do eksportu ({{ items|length }} znaleziono):</h2>
@@ -270,15 +282,6 @@ TEMPLATE = """
     <label><input type="checkbox" id="filter-authors" checked onchange="filterByMatch()"> Tylko autorzy</label>
     <label><input type="checkbox" id="filter-none" checked onchange="filterByMatch()"> Brak dopasowania</label>
     <label><input type="checkbox" id="filter-error" checked onchange="filterByMatch()"> Błąd parsowania</label>
-  </div>
-  
-  <div class="legend">
-    <strong>Legenda kolorów:</strong><br>
-    <div class="legend-item"><span class="legend-color" style="border: 2px solid #28a745;"></span>Pełne dopasowanie</div>
-    <div class="legend-item"><span class="legend-color" style="border: 2px solid #ffc107;"></span>Tylko tytuł</div>
-    <div class="legend-item"><span class="legend-color" style="border: 2px solid #17a2b8;"></span>Tylko autorzy</div>
-    <div class="legend-item"><span class="legend-color" style="border: 2px solid #dc3545;"></span>Brak dopasowania</div>
-    <div class="legend-item"><span class="legend-color" style="border: 2px solid #6c757d;"></span>Błąd parsowania</div>
   </div>
   {% endif %}
 
@@ -300,7 +303,7 @@ TEMPLATE = """
         {% if comparison and comparison.folder_parsed %}
           <div class="match-info">
             <strong>Folder:</strong> {{ comparison.folder_name }}<br>
-            <strong>Sparsowane:</strong> {{ comparison.parsed_title }} – {{ comparison.parsed_authors|join(', ') }}<br>
+            <strong>Sparsowane:</strong> {{ comparison.parsed_authors|join(', ') }} – {{ comparison.parsed_title }}<br>
             <strong>Dopasowanie:</strong> 
             {% if comparison.match_status == 'full_match' %}✓ Pełne dopasowanie
             {% elif comparison.match_status == 'title_only' %}⚠ Tylko tytuł
@@ -319,7 +322,6 @@ TEMPLATE = """
   {% endfor %}
   </div>
   <input type="hidden" name="library" value="{{ selected_lib }}">
-  <input type="hidden" name="compare_folders" value="{{ '1' if compare_folders else '0' }}">
   <button type="submit" style="margin-top: 15px;">Eksportuj zaznaczone</button>
 </form>
 {% endif %}

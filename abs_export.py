@@ -6,7 +6,7 @@ import csv
 # Define paths for CSV files
 CSV_DB_PATH = os.environ.get("ABS_CSV_DB_PATH", "/abs-data/csv_db")
 LIBRARIES_CSV = os.path.join(CSV_DB_PATH, "libraries.csv")
-LIBRARY_ITEMS_CSV = os.path.join(CSV_DB_PATH, "library_items.csv")
+LIBRARY_ITEMS_CSV = os.path.join(CSV_DB_PATH, "libraryItems.csv")
 
 # ABS_MEDIA_ROOT is now the base path where actual audiobook folders (named by ID) reside
 ABS_MEDIA_ROOT = os.environ.get("ABS_MEDIA_ROOT", "/media/Audiobooks")

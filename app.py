@@ -5,6 +5,7 @@ Reads directly from Audiobookshelf's SQLite database and exports
 metadata.json / cover.jpg files to a specified directory.
 """
 
+import importlib.util
 import os
 import threading
 import uuid
@@ -12,7 +13,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 
 import db
 import exporter
-import matcher
+
+# Load custom matcher.py from /data if present, otherwise use built-in
+_custom_matcher_path = "/data/matcher.py"
+if os.path.isfile(_custom_matcher_path):
+    spec = importlib.util.spec_from_file_location("matcher", _custom_matcher_path)
+    matcher = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(matcher)
+else:
+    import matcher
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)

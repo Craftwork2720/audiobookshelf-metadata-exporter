@@ -14,7 +14,7 @@ COPY . .
 
 ENV ABS_DATABASE_PATH="/config/absdatabase.sqlite"
 ENV ABS_ITEMS_PATH="/metadata/items"
-ENV EXPORT_PATH="/exported"
+ENV EXPORT_PATH="/data/exported"
 ENV MATCHER_ENABLED="false"
 ENV PORT=8080
 

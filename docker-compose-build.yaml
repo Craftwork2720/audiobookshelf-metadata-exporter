@@ -5,17 +5,12 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Mount the same config directory as your Audiobookshelf instance.
-      # Contains absdatabase.sqlite — the exporter reads it in read-only mode.
-      - "./data:/config:ro"
-      # Mount the same metadata directory as your Audiobookshelf instance.
-      # Contains per-item folders with metadata.json and cover.jpg files.
-      - "./data:/metadata:ro"
-      # Export destination — must be writable.
-      - "./data/exported:/exported:rw"
+      - "./data:/config:ro"      # ABS config (absdatabase.sqlite)
+      - "./data:/metadata:ro"  # ABS metadata (items/)
+      - "./data:/data:rw"          # Export + custom matcher.py
     environment:
-      ABS_DATABASE_PATH: "/config/absdatabase.sqlite"
-      ABS_ITEMS_PATH: "/metadata/items"
-      EXPORT_PATH: "/exported"
+      ABS_DATABASE_PATH: /config/absdatabase.sqlite
+      ABS_ITEMS_PATH: /metadata/items
+      EXPORT_PATH: /data/exported
       PORT: 8080
     restart: unless-stopped

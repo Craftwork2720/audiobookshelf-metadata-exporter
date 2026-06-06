@@ -29,7 +29,7 @@ Four source files:
 - **`app.py`** — Flask routes: `/` (library selector), `/browse` (item browser), `/export/start` (background export), `/export/status/<job_id>` (polling). Uses Jinja2 templates in `templates/`.
 - **`db.py`** — SQLite database layer. Read-only queries against `absdatabase.sqlite` using Python's built-in `sqlite3`. Functions: `get_book_libraries()`, `get_items_by_library(library_id)`, `get_library_name(library_id)`.
 - **`exporter.py`** — File copy logic. Copies `metadata.json` and `cover.jpg` from `ABS_ITEMS_PATH/{item_id}/` to the export destination. Provides both `export_items()` (synchronous) and `export_items_stream()` (generator yielding progress events).
-- **`matcher.py`** — Fuzzy matching of ABS metadata (title, authors) against folder names parsed from `rel_path`. Uses normalization (diacritics removal, lowercasing), three similarity strategies (sequence ratio, partial ratio, token overlap), and classifies items as `match`, `partial`, `unknown`, or `no_meta`. Tuned for Polish audiobook folder naming conventions (noise patterns like `czyta`, `[audiobook PL]`, `superprodukcja`).
+- **`matcher.py`** — Fuzzy matching of ABS metadata (title, authors) against folder names parsed from `rel_path`. Uses normalization (diacritics removal, lowercasing), three similarity strategies (sequence ratio, partial ratio, token overlap), and classifies items as `match`, `partial`, `unknown`, or `no_meta`. Tuned for Polish audiobook folder naming conventions (noise patterns like `czyta`, `[audiobook PL]`, `superprodukcja`). Users can provide a custom `matcher.py` in `/data/` to override the built-in one.
 
 ### Export flow
 
@@ -52,7 +52,7 @@ Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
-| `EXPORT_PATH` | `/exported` | Default export destination in UI |
+| `EXPORT_PATH` | `/data/exported` | Default export destination in UI |
 | `MATCHER_ENABLED` | `false` | Enable fuzzy matching of metadata against folder names |
 | `SECRET_KEY` | random | Flask secret key |
 

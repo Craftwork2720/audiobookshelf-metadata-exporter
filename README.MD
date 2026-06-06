@@ -24,11 +24,11 @@ services:
       PORT: 8080
       ABS_DATABASE_PATH: /config/absdatabase.sqlite
       ABS_ITEMS_PATH: /metadata/items
-      EXPORT_PATH: /exported
+      EXPORT_PATH: /data/exported
     volumes:
-      - "./config:/config:ro"      # Audiobookshelf config
-      - "./metadata:/metadata:ro"  # Audiobookshelf metadata
-      - "./data/exported:/exported:rw"  # Export destination — creates a subfolder named after the library
+      - "/path/to/abs/config:/config:ro"      # ABS config (absdatabase.sqlite)
+      - "/path/to/abs/metadata:/metadata:ro"  # ABS metadata (items/)
+      - "./data:/data:rw"          # Export + custom matcher.py
     restart: unless-stopped
 ```
 
@@ -39,8 +39,8 @@ services:
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
-| `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
-| `MATCHER_ENABLED` | `false` | Compares title and author from metadata against folder names to flag mismatches. Tuned for specific naming conventions — edit `matcher.py` patterns to match your folder structure (also toggleable in UI) |
+| `EXPORT_PATH` | `/data/exported` | Default export destination shown in UI |
+| `MATCHER_ENABLED` | `false` | Compares title and author from metadata against folder names to flag mismatches. Drop a custom `matcher.py` in `./data/` to override the built-in one (also toggleable in UI) |
 | `SECRET_KEY` | random | Flask session key |
 
 ## Usage

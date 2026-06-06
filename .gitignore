@@ -39,4 +39,3 @@ ehthumbs.db
 /app.py
 .build/
 .claude/
-/.build

@@ -1,0 +1,13 @@
+services:
+  audiobookshelf-exporter:
+    build: .
+    container_name: audiobookshelf-exporter
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./data/absdatabase.sqlite:/config/absdatabase.sqlite:ro"
+      - "./data/items:/media/Audiobooks:ro"
+      - "./data/exported:/exported_audiobooks:rw"
+    environment:
+      PORT: 8080
+    restart: unless-stopped

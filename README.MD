@@ -74,10 +74,5 @@ python app.py
 ## Building the Docker Image
 
 ```bash
-# Local build
 docker compose -f docker-compose-dev.yaml up --build
-
-# Multi-arch build (amd64 + arm64)
-docker buildx build . --platform linux/amd64,linux/arm64 --push \
-  -t ghcr.io/craftwork2720/audiobookshelf-meta-exporter:latest
 ```

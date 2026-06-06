@@ -259,10 +259,11 @@
 
         // Show summary
         if (counts) {
+            const total = counts.success + counts.skipped + counts.error;
             const summary = document.getElementById('results-summary');
             summary.innerHTML = `
                 <div class="col-md-3"><div class="card text-center"><div class="card-body">
-                    <div class="display-6">${results.length}</div><div class="text-muted">Total Items</div>
+                    <div class="display-6">${total}</div><div class="text-muted">Total Items</div>
                 </div></div></div>
                 <div class="col-md-3"><div class="card text-center border-success"><div class="card-body">
                     <div class="display-6 text-success">${counts.success}</div><div class="text-muted">Succeeded</div>
@@ -283,18 +284,33 @@
             }
         }
 
-        // Show results table
+        // Show issues table (only non-success results)
         const tbody = document.getElementById('results-body');
+        const tableEl = document.getElementById('results-table');
         tbody.innerHTML = '';
-        for (const r of results) {
-            const metaBadge = badgeFor(r.metadata_status);
-            const coverBadge = badgeFor(r.cover_status);
-            const statusBadge = overallBadge(r);
-            tbody.innerHTML += `<tr>
-                <td>${r.title || '—'}</td>
-                <td class="text-muted small">${r.rel_path || '—'}</td>
-                <td>${metaBadge}</td><td>${coverBadge}</td><td>${statusBadge}</td>
-            </tr>`;
+
+        if (!results || results.length === 0) {
+            tableEl.classList.add('d-none');
+            const successAlert = document.createElement('div');
+            successAlert.className = 'alert alert-success';
+            successAlert.innerHTML = '<i class="bi bi-check-circle"></i> All items exported successfully.';
+            document.getElementById('export-results').appendChild(successAlert);
+        } else {
+            tableEl.classList.remove('d-none');
+            const note = document.createElement('div');
+            note.className = 'text-muted small mb-2';
+            note.textContent = `${counts.success} succeeded, showing ${results.length} issues:`;
+            document.getElementById('export-results').insertBefore(note, tableEl);
+            for (const r of results) {
+                const metaBadge = badgeFor(r.metadata_status);
+                const coverBadge = badgeFor(r.cover_status);
+                const statusBadge = overallBadge(r);
+                tbody.innerHTML += `<tr>
+                    <td>${r.title || '—'}</td>
+                    <td class="text-muted small">${r.rel_path || '—'}</td>
+                    <td>${metaBadge}</td><td>${coverBadge}</td><td>${statusBadge}</td>
+                </tr>`;
+            }
         }
 
         document.getElementById('export-results').classList.remove('d-none');

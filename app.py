@@ -99,7 +99,9 @@ def export_start():
                 if event["type"] == "progress":
                     job["current"] = event["current"]
                     job["total"] = event["total"]
-                    job["results"].append(event["result"])
+                    r = event["result"]
+                    if r.get("overall_class") != "success":
+                        job["results"].append(r)
                 elif event["type"] == "done":
                     job["counts"] = event["counts"]
                     job["file_counts"] = event["file_counts"]

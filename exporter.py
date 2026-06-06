@@ -57,7 +57,7 @@ def export_items_stream(items, export_path):
       - type: "progress" | "error" | "done"
       - For "progress": current, total, result (single item result)
       - For "error": message
-      - For "done": results, counts, file_counts
+      - For "done": counts, file_counts
     """
     total = len(items)
 
@@ -68,14 +68,16 @@ def export_items_stream(items, export_path):
             yield {"type": "error", "message": f"Cannot create export directory: {e}"}
             return
 
-    results = []
+    counts = {"success": 0, "skipped": 0, "error": 0}
     metadata_copied = 0
     cover_copied = 0
 
     for i, item in enumerate(items):
         result = _export_single_item(item, export_path)
-        results.append(result)
 
+        cls = result.get("overall_class", "error")
+        if cls in counts:
+            counts[cls] += 1
         if result.get("metadata_copied"):
             metadata_copied += 1
         if result.get("cover_copied"):
@@ -87,18 +89,6 @@ def export_items_stream(items, export_path):
             "total": total,
             "result": result,
         }
-
-        try:
-            import gevent
-            gevent.sleep(0)
-        except ImportError:
-            pass
-
-    counts = {"success": 0, "skipped": 0, "error": 0}
-    for r in results:
-        cls = r.get("overall_class", "error")
-        if cls in counts:
-            counts[cls] += 1
 
     yield {
         "type": "done",

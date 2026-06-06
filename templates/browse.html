@@ -17,13 +17,13 @@
     <div class="card mb-3">
         <div class="card-body py-2">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="bi bi-search"></i></span>
                         <input type="text" id="search-input" class="form-control" placeholder="Filter items…">
                     </div>
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-4">
                     <div class="btn-group btn-group-sm">
                         <button type="button" class="btn btn-outline-primary" id="btn-select-all">Select All</button>
                         <button type="button" class="btn btn-outline-primary" id="btn-deselect-all">Deselect All</button>
@@ -32,7 +32,16 @@
                         </button>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-auto">
+                    <div class="btn-group btn-group-sm" id="match-filter">
+                        <button type="button" class="btn btn-outline-secondary active" data-match="all">All</button>
+                        <button type="button" class="btn btn-outline-success" data-match="match">&#10003;</button>
+                        <button type="button" class="btn btn-outline-warning" data-match="partial">&#9888;</button>
+                        <button type="button" class="btn btn-outline-secondary" data-match="no_meta">—</button>
+                        <button type="button" class="btn btn-outline-dark" data-match="unknown">?</button>
+                    </div>
+                </div>
+                <div class="col">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="bi bi-folder"></i> Export to</span>
                         <input type="text" name="export_path" class="form-control"
@@ -83,38 +92,50 @@
             <thead class="table-light">
                 <tr>
                     <th width="40"><input type="checkbox" id="check-all" class="form-check-input"></th>
-                    <th>Title</th>
-                    <th>Authors</th>
-                    <th>Series</th>
-                    <th>Match</th>
-                    <th>Published</th>
-                    <th>Path</th>
+                    <th class="sortable" data-col="0">Title <span class="sort-icon">&#8597;</span></th>
+                    <th class="sortable" data-col="1">Authors <span class="sort-icon">&#8597;</span></th>
+                    <th class="sortable" data-col="2">Series <span class="sort-icon">&#8597;</span></th>
+                    <th class="sortable" data-col="5">Match <span class="sort-icon">&#8597;</span></th>
+                    <th class="sortable" data-col="3">Published <span class="sort-icon">&#8597;</span></th>
+                    <th class="sortable" data-col="4">Path <span class="sort-icon">&#8597;</span></th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in items %}
-                <tr class="item-row">
+                <tr class="item-row"
+                    data-title="{{ item.title or item.book_title or '' }}"
+                    data-authors="{{ item.authors or '' }}"
+                    data-series="{{ item.series or '' }}"
+                    data-published="{{ item.published_year or '' }}"
+                    data-path="{{ item.rel_path or '' }}"
+                    data-match="{{ item.match.status }}">
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}"
                                class="form-check-input item-checkbox">
                     </td>
                     <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
-                    <td class="item-authors">{{ item.authors or '—' }}</td>
+                    <td class="item-authors {% if item.match.author_score is not none and item.match.author_score < 0.55 and not item.match.lektor_author %}table-danger{% endif %}"
+                        title="{% if item.match.author_score is not none %}Author match score: {{ item.match.author_score }}{% endif %}">
+                        {{ item.authors or '—' }}
+                    </td>
                     <td class="item-series">{{ item.series or '—' }}</td>
                     <td>
                         {% set m = item.match %}
                         {% if m.status == 'match' %}
-                            <span class="badge bg-success" title="Title: {{ m.title_score }} | Author: {{ m.author_score }}">&#10003;</span>
+                            <span class="badge bg-success"
+                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }}">&#10003;</span>
                         {% elif m.status == 'partial' %}
                             <span class="badge bg-warning text-dark"
-                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }} | Folder: {{ m.folder_author }} - {{ m.folder_title }}">
-                                &#9888;
-                            </span>
-                        {% else %}
+                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }}{% if m.lektor_author %} | ⚠ Author field contains narrator{% endif %} | Folder: {{ m.folder_author }} — {{ m.folder_title }}">&#9888;</span>
+                        {% elif m.status == 'no_meta' %}
                             <span class="badge bg-secondary"
-                                  title="Could not parse: {{ m.folder_title }}">
-                                ?
-                            </span>
+                                  title="Title matches folder name — no metadata set">—</span>
+                        {% else %}
+                            <span class="badge bg-dark"
+                                  title="Could not parse folder: {{ m.folder_title }}">?</span>
+                        {% endif %}
+                        {% if m.lektor_author %}
+                            <span class="badge bg-info ms-1" title="Author field contains narrator name">&#127908;</span>
                         {% endif %}
                     </td>
                     <td>{{ item.published_year or '—' }}</td>
@@ -148,46 +169,131 @@
     const btnExportTop = document.getElementById('btn-export-top');
     const exportForm = document.getElementById('export-form');
 
+    // --- State ---
+    let currentSort = { col: null, asc: true };
+    let currentMatchFilter = 'all';
+
+    // --- Core visibility ---
+    function isRowVisible(row) {
+        if (currentMatchFilter !== 'all' && row.dataset.match !== currentMatchFilter) return false;
+        const q = searchInput.value.toLowerCase();
+        if (q && !row.textContent.toLowerCase().includes(q)) return false;
+        return true;
+    }
+
+    function applyFilters() {
+        document.querySelectorAll('.item-row').forEach(row => {
+            row.style.display = isRowVisible(row) ? '' : 'none';
+        });
+        updateCount();
+        updateCheckAllState();
+    }
+
+    // --- Sort ---
+    function sortTable(colIndex) {
+        const tbody = document.querySelector('#items-table tbody');
+        const rows = Array.from(tbody.querySelectorAll('.item-row'));
+        const colKey = ['title','authors','series','published','path','match'][colIndex];
+
+        if (currentSort.col === colIndex) {
+            currentSort.asc = !currentSort.asc;
+        } else {
+            currentSort.col = colIndex;
+            currentSort.asc = true;
+        }
+
+        rows.sort((a, b) => {
+            const av = (a.dataset[colKey] || '').toLowerCase();
+            const bv = (b.dataset[colKey] || '').toLowerCase();
+            if (colKey === 'match') {
+                const order = { match: 0, partial: 1, unknown: 2 };
+                return currentSort.asc
+                    ? (order[av] ?? 9) - (order[bv] ?? 9)
+                    : (order[bv] ?? 9) - (order[av] ?? 9);
+            }
+            if (av < bv) return currentSort.asc ? -1 : 1;
+            if (av > bv) return currentSort.asc ? 1 : -1;
+            return 0;
+        });
+
+        rows.forEach(r => tbody.appendChild(r));
+
+        document.querySelectorAll('.sortable').forEach(th => {
+            const icon = th.querySelector('.sort-icon');
+            if (parseInt(th.dataset.col) === colIndex) {
+                icon.textContent = currentSort.asc ? '↑' : '↓';
+            } else {
+                icon.textContent = '↕';
+            }
+        });
+
+        applyFilters();
+    }
+
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', () => sortTable(parseInt(th.dataset.col)));
+    });
+
+    // --- Match filter ---
+    document.querySelectorAll('#match-filter [data-match]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('#match-filter [data-match]')
+                .forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentMatchFilter = btn.dataset.match;
+            applyFilters();
+        });
+    });
+
+    // --- Search ---
+    searchInput.addEventListener('input', applyFilters);
+
+    // --- Count ---
     function updateCount() {
         const checked = document.querySelectorAll('.item-checkbox:checked').length;
-        selectionCount.textContent = checked + ' selected';
+        const visible = document.querySelectorAll('.item-row:not([style*="display: none"])').length;
+        const total = document.querySelectorAll('.item-row').length;
+        selectionCount.textContent = checked + ' selected · ' + visible + ' of ' + total + ' shown';
         btnExport.disabled = checked === 0;
         if (btnExportTop) btnExportTop.disabled = checked === 0;
     }
 
-    // Check all
+    // --- Check all state ---
+    function updateCheckAllState() {
+        const visible = document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox');
+        const checkedVisible = document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox:checked');
+        checkAll.checked = visible.length > 0 && checkedVisible.length === visible.length;
+        checkAll.indeterminate = checkedVisible.length > 0 && checkedVisible.length < visible.length;
+    }
+
     checkAll.addEventListener('change', () => {
         document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox')
             .forEach(cb => { cb.checked = checkAll.checked; });
         updateCount();
     });
 
-    // Individual checkboxes
-    checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
-
-    // Select/Deselect all buttons
     document.getElementById('btn-select-all').addEventListener('click', () => {
         document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox')
             .forEach(cb => { cb.checked = true; });
         checkAll.checked = true;
+        checkAll.indeterminate = false;
         updateCount();
     });
+
     document.getElementById('btn-deselect-all').addEventListener('click', () => {
         checkboxes.forEach(cb => { cb.checked = false; });
         checkAll.checked = false;
+        checkAll.indeterminate = false;
         updateCount();
     });
 
-    // Search filter
-    searchInput.addEventListener('input', () => {
-        const q = searchInput.value.toLowerCase();
-        document.querySelectorAll('.item-row').forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(q) ? '' : 'none';
-        });
-    });
+    checkboxes.forEach(cb => cb.addEventListener('change', () => {
+        updateCount();
+        updateCheckAllState();
+    }));
 
-    // Export via polling
+    // --- Export via polling ---
     exportForm.addEventListener('submit', async function(e) {
         e.preventDefault();
 

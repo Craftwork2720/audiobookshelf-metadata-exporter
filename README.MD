@@ -41,6 +41,7 @@ services:
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/data/exported` | Default export destination shown in UI |
 | `MATCHER_ENABLED` | `false` | Compares title and author from metadata against folder names to flag mismatches. Drop a custom `matcher.py` in `./data/` to override the built-in one (also toggleable in UI) |
+| `LIBRARY_EXPORT_PATHS` | | Per-library export paths. Format: `Name:/path,Name2:/path2`. Overrides default export path for matching library names |
 | `SECRET_KEY` | random | Flask session key |
 
 ## Usage

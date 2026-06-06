@@ -13,5 +13,6 @@ services:
       ABS_ITEMS_PATH: /metadata/items
       EXPORT_PATH: /data/exported
       MATCHER_ENABLED: "true"
+      LIBRARY_EXPORT_PATHS: Audiobooki:/data/audiobooki
       PORT: 8080
     restart: unless-stopped

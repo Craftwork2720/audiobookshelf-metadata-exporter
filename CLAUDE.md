@@ -54,6 +54,7 @@ Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/data/exported` | Default export destination in UI |
 | `MATCHER_ENABLED` | `false` | Enable fuzzy matching of metadata against folder names |
+| `LIBRARY_EXPORT_PATHS` | | Per-library export paths: `Name:/path,Name2:/path2` |
 | `SECRET_KEY` | random | Flask secret key |
 
 ## Key Design Decisions

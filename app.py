@@ -29,6 +29,15 @@ app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 DEFAULT_EXPORT_PATH = os.environ.get("EXPORT_PATH", "/exported")
 MATCHER_ENABLED = os.environ.get("MATCHER_ENABLED", "false").lower() in ("true", "1", "yes")
 
+# Per-library export paths: LIBRARY_EXPORT_PATHS="Audiobooki:/data/Polskie,Angielskie:/data/English"
+_LIBRARY_PATHS_RAW = os.environ.get("LIBRARY_EXPORT_PATHS", "")
+LIBRARY_EXPORT_PATHS = {}
+for entry in _LIBRARY_PATHS_RAW.split(","):
+    entry = entry.strip()
+    if ":" in entry:
+        name, path = entry.split(":", 1)
+        LIBRARY_EXPORT_PATHS[name.strip()] = path.strip()
+
 # In-memory job store for export progress polling
 jobs = {}
 jobs_lock = threading.Lock()
@@ -81,7 +90,11 @@ def browse():
                 item.get("rel_path", ""),
             )
 
-    default_path = os.path.join(DEFAULT_EXPORT_PATH, library_name or "Unknown")
+    # Per-library path overrides default
+    if library_name and library_name in LIBRARY_EXPORT_PATHS:
+        default_path = LIBRARY_EXPORT_PATHS[library_name]
+    else:
+        default_path = os.path.join(DEFAULT_EXPORT_PATH, library_name or "Unknown")
 
     return render_template(
         "browse.html",

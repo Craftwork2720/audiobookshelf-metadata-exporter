@@ -16,6 +16,7 @@ ENV ABS_DATABASE_PATH="/config/absdatabase.sqlite"
 ENV ABS_ITEMS_PATH="/metadata/items"
 ENV EXPORT_PATH="/data/exported"
 ENV MATCHER_ENABLED="false"
+ENV LIBRARY_EXPORT_PATHS=""
 ENV PORT=8080
 
 EXPOSE 8080

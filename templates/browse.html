@@ -368,9 +368,7 @@
         const jobId = startData.job_id;
 
         // 2. Poll status every 500ms
-        const tbody = document.getElementById('results-body');
-        tbody.innerHTML = '';
-        let resultsStarted = false;
+        const allResults = [];
 
         const poll = setInterval(async () => {
             try {
@@ -384,28 +382,14 @@
                 progressBar.textContent = pct + '%';
                 progressCount.textContent = s.current + ' / ' + s.total;
 
-                // Append new result rows incrementally
+                // Collect results
                 if (s.new_results && s.new_results.length > 0) {
-                    if (!resultsStarted) {
-                        document.getElementById('export-results').classList.remove('d-none');
-                        document.getElementById('results-table').classList.remove('d-none');
-                        resultsStarted = true;
-                    }
-                    for (const r of s.new_results) {
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${r.title || '—'}</td>
-                            <td class="text-muted small">${r.rel_path || '—'}</td>
-                            <td>${badgeFor(r.metadata_status)}</td>
-                            <td>${badgeFor(r.cover_status)}</td>
-                            <td>${overallBadge(r)}</td>`;
-                        tbody.appendChild(tr);
-                    }
+                    allResults.push(...s.new_results);
                 }
 
                 if (s.status === 'done') {
                     clearInterval(poll);
-                    finishExport(s.counts, s.file_counts);
+                    finishExport(s.counts, s.file_counts, allResults);
                 } else if (s.status === 'error') {
                     clearInterval(poll);
                     showError(s.error || 'Export failed');
@@ -417,7 +401,7 @@
         }, 500);
     });
 
-    function finishExport(counts, fileCounts) {
+    function finishExport(counts, fileCounts, allResults) {
         const progressBar = document.getElementById('progress-bar');
         const progressLabel = document.getElementById('progress-label');
 
@@ -426,6 +410,25 @@
         progressBar.classList.remove('progress-bar-animated');
         progressBar.classList.add('bg-success');
         progressLabel.textContent = 'Export complete!';
+
+        // Build results table sorted by Title A→Z
+        if (allResults && allResults.length > 0) {
+            allResults.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+            const tbody = document.getElementById('results-body');
+            tbody.innerHTML = '';
+            for (const r of allResults) {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.title || '—'}</td>
+                    <td class="text-muted small">${r.rel_path || '—'}</td>
+                    <td>${badgeFor(r.metadata_status)}</td>
+                    <td>${badgeFor(r.cover_status)}</td>
+                    <td>${overallBadge(r)}</td>`;
+                tbody.appendChild(tr);
+            }
+            document.getElementById('export-results').classList.remove('d-none');
+            document.getElementById('results-table').classList.remove('d-none');
+        }
 
         // Show summary cards
         if (counts) {

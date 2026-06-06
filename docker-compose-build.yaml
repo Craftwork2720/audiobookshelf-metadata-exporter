@@ -7,10 +7,10 @@ services:
     volumes:
       # Mount the same config directory as your Audiobookshelf instance.
       # Contains absdatabase.sqlite — the exporter reads it in read-only mode.
-      - "./config:/config:ro"
+      - "./data:/config:ro"
       # Mount the same metadata directory as your Audiobookshelf instance.
       # Contains per-item folders with metadata.json and cover.jpg files.
-      - "./metadata:/metadata:ro"
+      - "./data:/metadata:ro"
       # Export destination — must be writable.
       - "./data/exported:/exported:rw"
     environment:

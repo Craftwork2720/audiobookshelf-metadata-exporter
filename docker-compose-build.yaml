@@ -12,5 +12,6 @@ services:
       ABS_DATABASE_PATH: /config/absdatabase.sqlite
       ABS_ITEMS_PATH: /metadata/items
       EXPORT_PATH: /data/exported
+      MATCHER_ENABLED: "true"
       PORT: 8080
     restart: unless-stopped

@@ -120,41 +120,34 @@
             </thead>
             <tbody>
                 {% for item in items %}
-                <tr class="item-row"
+                {% set m = item.match if matcher_enabled else none %}
+                <tr class="item-row{% if matcher_enabled and m.status == 'unknown' %} table-danger{% elif matcher_enabled and m.status == 'no_meta' %} table-secondary{% endif %}"
                     data-title="{{ item.title or item.book_title or '' }}"
                     data-authors="{{ item.authors or '' }}"
                     data-series="{{ item.series or '' }}"
                     data-published="{{ item.published_year or '' }}"
                     data-path="{{ item.rel_path or '' }}"
-                    {% if matcher_enabled %}data-match="{{ item.match.status }}"{% endif %}>
+                    {% if matcher_enabled %}data-match="{{ m.status }}"{% endif %}>
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}"
                                class="form-check-input item-checkbox">
                     </td>
                     <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
-                    <td class="item-authors{% if matcher_enabled and item.match.author_score is not none and item.match.author_score < 0.55 and not item.match.lektor_author %} table-danger{% endif %}"
-                        {% if matcher_enabled and item.match.author_score is not none %}title="Author match score: {{ item.match.author_score }}"{% endif %}>
+                    <td class="item-authors{% if matcher_enabled and m.author_score is not none and m.author_score < 0.55 %} table-danger{% endif %}"
+                        {% if matcher_enabled and m.author_score is not none %}title="Author match: {{ m.author_score }}"{% endif %}>
                         {{ item.authors or '—' }}
                     </td>
                     <td class="item-series">{{ item.series or '—' }}</td>
                     {% if matcher_enabled %}
                     <td>
-                        {% set m = item.match %}
                         {% if m.status == 'match' %}
-                            <span class="badge bg-success"
-                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }}">&#10003;</span>
+                            <span class="badge bg-success" title="Title: {{ m.title_score }} | Author: {{ m.author_score }}">&#10003;</span>
                         {% elif m.status == 'partial' %}
-                            <span class="badge bg-warning text-dark"
-                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }}{% if m.lektor_author %} | ⚠ Author field contains narrator{% endif %} | Folder: {{ m.folder_author }} — {{ m.folder_title }}">&#9888;</span>
+                            <span class="badge bg-warning text-dark" title="Title: {{ m.title_score }} | Author: {{ m.author_score }} | Folder: {{ m.folder_title }}">&#9888;</span>
                         {% elif m.status == 'no_meta' %}
-                            <span class="badge bg-secondary"
-                                  title="Title matches folder name — no metadata set">—</span>
+                            <span class="badge bg-secondary" title="No metadata — title matches folder name">—</span>
                         {% else %}
-                            <span class="badge bg-dark"
-                                  title="Could not parse folder: {{ m.folder_title }}">?</span>
-                        {% endif %}
-                        {% if m.lektor_author %}
-                            <span class="badge bg-info ms-1" title="Author field contains narrator name">&#127908;</span>
+                            <span class="badge bg-dark" title="Could not match: {{ m.folder_title }}">?</span>
                         {% endif %}
                     </td>
                     {% endif %}

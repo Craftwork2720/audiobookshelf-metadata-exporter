@@ -9,6 +9,7 @@ import importlib.util
 import os
 import threading
 import uuid
+from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash
 
 import db
@@ -104,6 +105,53 @@ def browse():
         default_export_path=default_path,
         matcher_enabled=matcher_enabled,
     )
+
+
+@app.route("/export/zip", methods=["POST"])
+def export_zip():
+    """Generate a ZIP archive and save it to the export directory."""
+    library_id = request.form.get("library_id")
+    export_path = request.form.get("export_path", "").strip()
+    select_all = request.form.get("select_all") == "true"
+    item_ids = request.form.getlist("item_ids")
+
+    if not select_all and not item_ids:
+        return {"error": "No items selected"}, 400
+    if not export_path:
+        return {"error": "Export path required"}, 400
+
+    try:
+        library_name = db.get_library_name(library_id)
+        all_items = db.get_items_by_library(library_id)
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+    if select_all:
+        selected_items = all_items
+    else:
+        id_set = set(item_ids)
+        selected_items = [item for item in all_items if item["id"] in id_set]
+
+    zip_buf, counts, file_counts, results = exporter.export_to_zip(selected_items)
+    date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{library_name or 'export'}_{date_str}.zip"
+
+    # Save ZIP to export directory
+    try:
+        os.makedirs(export_path, exist_ok=True)
+        dest = os.path.join(export_path, filename)
+        with open(dest, "wb") as f:
+            f.write(zip_buf.read())
+    except Exception as e:
+        return {"error": f"Cannot save ZIP: {e}"}, 500
+
+    return {
+        "success": True,
+        "file": dest,
+        "counts": counts,
+        "file_counts": file_counts,
+        "results": results,
+    }
 
 
 @app.route("/export/start", methods=["POST"])

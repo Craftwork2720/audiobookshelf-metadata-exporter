@@ -30,6 +30,9 @@
                         <button type="submit" class="btn btn-success" id="btn-export-top" disabled>
                             <i class="bi bi-download"></i> Export Selected
                         </button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-zip-top" disabled>
+                            <i class="bi bi-file-zip"></i> ZIP
+                        </button>
                     </div>
                 </div>
                 {% if matcher_enabled %}
@@ -162,9 +165,14 @@
     {% if items %}
     <div class="d-flex justify-content-between align-items-center mt-2 mb-4" id="export-controls">
         <span class="text-muted" id="selection-count">0 selected</span>
-        <button type="submit" class="btn btn-success" id="btn-export" disabled>
-            <i class="bi bi-download"></i> Export Selected
-        </button>
+        <div class="btn-group">
+            <button type="submit" class="btn btn-success" id="btn-export" disabled>
+                <i class="bi bi-download"></i> Export Selected
+            </button>
+            <button type="button" class="btn btn-outline-primary" id="btn-zip" disabled>
+                <i class="bi bi-file-zip"></i> ZIP
+            </button>
+        </div>
     </div>
     {% else %}
     <div class="card border-info mt-4">
@@ -193,6 +201,8 @@
     const selectionCount = document.getElementById('selection-count');
     const btnExport = document.getElementById('btn-export');
     const btnExportTop = document.getElementById('btn-export-top');
+    const btnZip = document.getElementById('btn-zip');
+    const btnZipTop = document.getElementById('btn-zip-top');
     const exportForm = document.getElementById('export-form');
     const matcherEnabled = {{ 'true' if matcher_enabled else 'false' }};
 
@@ -290,6 +300,8 @@
         selectionCount.textContent = checked + ' selected · ' + visible + ' of ' + total + ' shown';
         btnExport.disabled = checked === 0;
         if (btnExportTop) btnExportTop.disabled = checked === 0;
+        btnZip.disabled = checked === 0;
+        if (btnZipTop) btnZipTop.disabled = checked === 0;
     }
 
     // --- Check all state ---
@@ -342,11 +354,8 @@
                         visible[i].checked = shouldBeChecked;
                     }
                 }
-            } else if (!e.ctrlKey && !e.metaKey) {
-                // Plain click: deselect others, select only this one
-                visible.forEach(c => { if (c !== this) c.checked = false; });
-                this.checked = true;
             }
+            // Default click: just toggle this one, don't deselect others
             lastChecked = this;
             updateCount();
             updateCheckAllState();
@@ -441,6 +450,105 @@
             }
         }, 500);
     });
+
+    // --- ZIP export (save to server) ---
+    function exportZip() {
+        const checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
+        if (checkedBoxes.length === 0) return;
+
+        const formData = new FormData();
+        formData.append('library_id', document.querySelector('[name=library_id]').value);
+        formData.append('export_path', document.querySelector('[name=export_path]').value);
+
+        const allCheckboxes = document.querySelectorAll('.item-checkbox');
+        if (checkedBoxes.length === allCheckboxes.length) {
+            formData.append('select_all', 'true');
+        } else {
+            checkedBoxes.forEach(cb => formData.append('item_ids', cb.value));
+        }
+
+        // Show progress, hide table
+        const progressCard = document.getElementById('progress-card');
+        const progressBar = document.getElementById('progress-bar');
+        const progressLabel = document.getElementById('progress-label');
+        const progressCount = document.getElementById('progress-count');
+
+        progressCard.classList.remove('d-none');
+        document.getElementById('items-table-wrapper').classList.add('d-none');
+        document.getElementById('export-controls').classList.add('d-none');
+        document.getElementById('export-results').classList.add('d-none');
+        document.getElementById('search-input').closest('.card').classList.add('d-none');
+
+        progressBar.style.width = '0%';
+        progressBar.textContent = '';
+        progressBar.classList.add('progress-bar-animated');
+        progressBar.classList.remove('bg-success', 'bg-danger');
+        progressLabel.textContent = 'Generating ZIP…';
+        progressCount.textContent = checkedBoxes.length + ' items';
+
+        fetch('/export/zip', { method: 'POST', body: formData })
+            .then(resp => resp.json())
+            .then(data => {
+                if (data.error) {
+                    progressLabel.textContent = 'Error: ' + data.error;
+                    progressBar.classList.remove('progress-bar-animated');
+                    progressBar.classList.add('bg-danger');
+                } else {
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    progressBar.classList.remove('progress-bar-animated');
+                    progressBar.classList.add('bg-success');
+                    progressLabel.textContent = 'ZIP saved!';
+
+                    const summary = document.getElementById('results-summary');
+                    const c = data.counts;
+                    const fc = data.file_counts;
+                    summary.innerHTML = `
+                        <div class="col-md-3"><div class="card text-center"><div class="card-body">
+                            <div class="display-6">${c.success + c.skipped + c.error}</div><div class="text-muted">Total Items</div>
+                        </div></div></div>
+                        <div class="col-md-3"><div class="card text-center border-success"><div class="card-body">
+                            <div class="display-6 text-success">${c.success}</div><div class="text-muted">In ZIP</div>
+                        </div></div></div>
+                        <div class="col-md-3"><div class="card text-center border-warning"><div class="card-body">
+                            <div class="display-6 text-warning">${c.skipped}</div><div class="text-muted">Skipped</div>
+                        </div></div></div>
+                        <div class="col-md-6"><div class="card border-info"><div class="card-body">
+                            <i class="bi bi-file-zip"></i> <strong>${data.file}</strong><br>
+                            <span class="text-muted">${fc.metadata} metadata files, ${fc.cover} cover images</span>
+                        </div></div></div>
+                    `;
+
+                    // Build results table sorted A→Z
+                    if (data.results && data.results.length > 0) {
+                        data.results.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+                        const tbody = document.getElementById('results-body');
+                        tbody.innerHTML = '';
+                        for (const r of data.results) {
+                            const tr = document.createElement('tr');
+                            tr.innerHTML = `
+                                <td>${r.title || '—'}</td>
+                                <td class="text-muted small">${r.rel_path || '—'}</td>
+                                <td>${badgeFor(r.metadata_status)}</td>
+                                <td>${badgeFor(r.cover_status)}</td>
+                                <td>${overallBadge(r)}</td>`;
+                            tbody.appendChild(tr);
+                        }
+                    }
+
+                    document.getElementById('export-results').classList.remove('d-none');
+                    document.getElementById('results-table').classList.remove('d-none');
+                }
+            })
+            .catch(err => {
+                progressLabel.textContent = 'Error: ' + err.message;
+                progressBar.classList.remove('progress-bar-animated');
+                progressBar.classList.add('bg-danger');
+            });
+    }
+
+    btnZip.addEventListener('click', exportZip);
+    if (btnZipTop) btnZipTop.addEventListener('click', exportZip);
 
     function finishExport(counts, fileCounts, allResults) {
         const progressBar = document.getElementById('progress-bar');

@@ -16,6 +16,7 @@ def normalize(text):
     text = unicodedata.normalize("NFD", text)
     text = "".join(c for c in text if unicodedata.category(c) != "Mn")
     text = text.lower()
+    text = re.sub(r"—", "-", text)                 # em-dash → dash
     text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
@@ -31,15 +32,28 @@ _NOISE = re.compile(r"""
   | \bmp3\b | \bm4b\b | \bflac\b
   | \d+kbps
   | \bbook\s+\d+\s*
-  | \((?:19|20)\d{2}\)
-  | \[.*?\]
-  | \(.*?\)
+  | \bvol\.?\s*\d+
+  | \bvolume\s*\d+
+  | \{[^}]*\}                         # {Narrator Name}
+  | \[[^\]]*\]                         # [anything]
+  | \((?:19|20)\d{2}\)                # (2024)
+  | \(.*?\)                           # (anything)
 """, re.IGNORECASE | re.VERBOSE)
 
 _COLLECTION_SEGMENT = re.compile(
     r"(collection|trilogy|box|series\s+\d|saga)",
     re.IGNORECASE
 )
+
+# Parenthesized author folders: (Author Name)
+_AUTHOR_FOLDER_RE = re.compile(r"^\(.*\)$")
+
+# Volume-only segment: "Volume 01", "Vol 3", "Voulume 01" (typo)
+# NOT "Book NN" — that appears in real titles like "Book 32 - A Hat Full of Sky"
+_VOLUME_RE = re.compile(r"^(?:v[o]?lu?me|vol)\s*\d+", re.IGNORECASE)
+
+# Year/season subfolder: "Year 1", "Season 2"
+_YEAR_RE = re.compile(r"^(?:year|season)\s+\d+", re.IGNORECASE)
 
 
 def _dots_to_spaces(text):
@@ -55,40 +69,84 @@ def _clean_segment(segment):
     """Remove noise from a folder segment."""
     segment = _dots_to_spaces(segment)
     segment = re.sub(r"_", " ", segment)
+    segment = re.sub(r"—", "-", segment)           # em-dash
     segment = _NOISE.sub(" ", segment)
-    segment = re.sub(r"\s*-\s*", " - ", segment)   # normalize dashes
-    segment = re.sub(r"(\s*-\s*){2,}", " - ", segment)  # collapse multiples
-    segment = re.sub(r"^\s*-\s*", "", segment)     # leading dash
-    segment = re.sub(r"\s*-\s*$", "", segment)     # trailing dash
+    segment = re.sub(r"\s*-\s*", " - ", segment)
+    segment = re.sub(r"(\s*-\s*){2,}", " - ", segment)
+    segment = re.sub(r"^\s*-\s*", "", segment)
+    segment = re.sub(r"\s*-\s*$", "", segment)
     segment = re.sub(r"\s+", " ", segment).strip()
     return segment
 
 
 def _pick_best_segment(segments):
-    """Pick the best segment from a path, working from leaf upward."""
+    """Pick the best segment from a path, working from leaf upward.
+
+    Skips:
+    - (Author) parenthesized folders
+    - Volume-only segments (Volume 01, Vol 3)
+    - Year/season subfolders (Year 1, Season 2)
+    - Collection containers
+    """
     for seg in reversed(segments):
         seg = seg.strip()
         if not seg:
             continue
+
+        # Skip (Author) folders
+        if _AUTHOR_FOLDER_RE.match(seg):
+            continue
+
+        # Skip volume-only and year/season segments
+        if _VOLUME_RE.match(seg) or _YEAR_RE.match(seg):
+            continue
+
         cleaned = _clean_segment(seg)
         if _COLLECTION_SEGMENT.search(cleaned) and len(cleaned.split()) <= 5:
             continue
         if len(cleaned) < 3:
             continue
         return seg
+
     return segments[-1] if segments else ""
 
 
 def _extract_candidate(rel_path):
-    """Parse rel_path into (folder_author, folder_title)."""
+    """Parse rel_path into (folder_author, folder_title).
+
+    Handles:
+      Author - Title (2020)
+      Author - Series NN - Title (2010) [AUDIOBOOK]
+      (Author)/Series/Volume NN - Title {Narrator}
+      Title by Author
+    """
     segments = [s for s in rel_path.replace("\\", "/").split("/") if s.strip()]
     if not segments:
         return None, ""
 
+    # Detect Lightnovels pattern: (Author)/.../(Volume NN - Title)
+    if len(segments) >= 2:
+        last = segments[-1].strip()
+        parent = segments[-2].strip()
+        if _AUTHOR_FOLDER_RE.match(parent):
+            author_name = parent.strip("()")
+            # Volume segment → use grandparent (series name)
+            if _VOLUME_RE.match(last) and len(segments) >= 3:
+                series_seg = segments[-3].strip()
+                # If series is also a year/season, go one level up
+                if _YEAR_RE.match(series_seg) and len(segments) >= 4:
+                    series_seg = segments[-4].strip()
+                cleaned = _clean_segment(series_seg)
+                return author_name, cleaned if cleaned else series_seg
+            # No volume → leaf is the title itself
+            cleaned = _clean_segment(last)
+            if cleaned:
+                return author_name, cleaned
+
     raw = _pick_best_segment(segments)
     cleaned = _clean_segment(raw)
 
-    # "Title by Author" — split on last " by "
+    # "Title by Author"
     if " by " in cleaned.lower():
         idx = cleaned.lower().rfind(" by ")
         title_part = cleaned[:idx].strip()
@@ -120,13 +178,20 @@ def _ratio(a, b):
 
 
 def _partial_ratio(a, b):
+    """Substring match — checks if shorter string appears inside longer."""
     na, nb = normalize(a), normalize(b)
     if not na or not nb:
         return 0.0
     shorter, longer = (na, nb) if len(na) <= len(nb) else (nb, na)
-    matcher = difflib.SequenceMatcher(None, shorter, longer)
-    match = matcher.find_longest_match(0, len(shorter), 0, len(longer))
-    return match.size / len(shorter) if match.size else 0.0
+    if shorter in longer:
+        return 1.0
+    # Try sliding window for partial substring match
+    best = 0.0
+    for i in range(len(longer) - len(shorter) + 1):
+        window = longer[i:i + len(shorter)]
+        r = difflib.SequenceMatcher(None, shorter, window).ratio()
+        best = max(best, r)
+    return best
 
 
 def _token_overlap(a, b):
@@ -169,17 +234,13 @@ def _is_no_metadata(title, rel_path):
     """Detect items where ABS used the folder name as the title."""
     if not title:
         return False
-    # Title contains raw folder markers → no real metadata
     if re.search(r"\[audiobook|\(\d{4}\)", title, re.IGNORECASE):
         return True
     if re.search(r".+ - .+ \(\d{4}\)", title):
         return True
-    # Title closely matches last folder segment — but only if the folder
-    # segment is essentially the same as the title (no extra "Book N", "Author -")
     segments = [s for s in rel_path.replace("\\", "/").split("/") if s.strip()]
     if segments:
         raw_last = segments[-1]
-        # Folder has "Book N" or " - " separator → it has structure, not no_meta
         if re.search(r"\bbook\s+\d+", raw_last, re.IGNORECASE) or " - " in raw_last:
             return False
         cleaned_last = _clean_segment(raw_last)
@@ -216,7 +277,7 @@ def compare(title, authors, rel_path):
     a_score = _author_score(authors, folder_author)
 
     if t_score >= 0.85:
-        status = "match"  # high confidence title match — author not needed
+        status = "match"
     elif t_score >= 0.68:
         status = "match" if (a_score is None or a_score >= 0.55) else "partial"
     elif t_score >= 0.42:

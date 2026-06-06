@@ -79,8 +79,6 @@ def export_start():
         id_set = set(item_ids)
         selected_items = [item for item in all_items if item["id"] in id_set]
 
-    export_path = os.path.join(export_path, library_name or "Unknown")
-
     job_id = str(uuid.uuid4())
     job = {
         "status": "running",

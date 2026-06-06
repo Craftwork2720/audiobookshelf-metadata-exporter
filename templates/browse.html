@@ -23,13 +23,16 @@
                         <input type="text" id="search-input" class="form-control" placeholder="Filter items…">
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-5">
                     <div class="btn-group btn-group-sm">
                         <button type="button" class="btn btn-outline-primary" id="btn-select-all">Select All</button>
                         <button type="button" class="btn btn-outline-primary" id="btn-deselect-all">Deselect All</button>
+                        <button type="submit" class="btn btn-success" id="btn-export-top" disabled>
+                            <i class="bi bi-download"></i> Export Selected
+                        </button>
                     </div>
                 </div>
-                <div class="col-md-5">
+                <div class="col-md-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="bi bi-folder"></i> Export to</span>
                         <input type="text" name="export_path" class="form-control"
@@ -125,12 +128,14 @@
     const searchInput = document.getElementById('search-input');
     const selectionCount = document.getElementById('selection-count');
     const btnExport = document.getElementById('btn-export');
+    const btnExportTop = document.getElementById('btn-export-top');
     const exportForm = document.getElementById('export-form');
 
     function updateCount() {
         const checked = document.querySelectorAll('.item-checkbox:checked').length;
         selectionCount.textContent = checked + ' selected';
         btnExport.disabled = checked === 0;
+        if (btnExportTop) btnExportTop.disabled = checked === 0;
     }
 
     // Check all

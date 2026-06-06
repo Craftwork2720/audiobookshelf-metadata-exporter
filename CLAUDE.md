@@ -32,12 +32,12 @@ Three source files:
 
 Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 
-## Database Schema (relevant tables)
+## Database Schema (relevant tables — camelCase names!)
 
-- `library` — library definitions (filter to `mediaType='book'`)
-- `libraryItem` — central entity, links to `book` via `mediaId`, has `relPath`, `title`, `authorNamesFirstLast`
-- `book` — book metadata (title, publishedYear, narrators, etc.)
-- `author` — linked to books via `bookAuthor` junction table
+- `libraries` — library definitions (filter to `mediaType='book'`)
+- `libraryItems` — central entity, links to `books` via `mediaId`, has `relPath`, `title`, `authorNamesFirstLast`
+- `books` — book metadata (title, publishedYear, narrators, etc.)
+- `authors` — linked to books via `bookAuthors` junction table
 - `series` — linked to books via `bookSeries` junction table (with `sequence`)
 
 ## Environment Variables

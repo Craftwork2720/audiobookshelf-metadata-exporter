@@ -23,7 +23,7 @@ def get_book_libraries():
     """Return all libraries with mediaType='book'."""
     with _get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, name FROM library WHERE mediaType = 'book' ORDER BY displayOrder, name"
+            "SELECT id, name FROM libraries WHERE mediaType = 'book' ORDER BY displayOrder, name"
         ).fetchall()
     return [dict(row) for row in rows]
 
@@ -49,10 +49,10 @@ def get_items_by_library(library_id):
                     ELSE NULL
                 END, ', '
             ) AS series
-        FROM libraryItem li
-        JOIN book b ON b.id = li.mediaId
-        LEFT JOIN bookAuthor ba ON ba.bookId = b.id
-        LEFT JOIN author a ON a.id = ba.authorId
+        FROM libraryItems li
+        JOIN books b ON b.id = li.mediaId
+        LEFT JOIN bookAuthors ba ON ba.bookId = b.id
+        LEFT JOIN authors a ON a.id = ba.authorId
         LEFT JOIN bookSeries bs ON bs.bookId = b.id
         LEFT JOIN series s ON s.id = bs.seriesId
         WHERE li.libraryId = ?
@@ -70,6 +70,6 @@ def get_library_name(library_id):
     """Return the name of a library by its ID."""
     with _get_connection() as conn:
         row = conn.execute(
-            "SELECT name FROM library WHERE id = ?", (library_id,)
+            "SELECT name FROM libraries WHERE id = ?", (library_id,)
         ).fetchone()
     return row["name"] if row else None

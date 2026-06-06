@@ -204,7 +204,7 @@
     const btnZip = document.getElementById('btn-zip');
     const btnZipTop = document.getElementById('btn-zip-top');
     const exportForm = document.getElementById('export-form');
-    const matcherEnabled = {{ 'true' if matcher_enabled else 'false' }};
+    const matcherEnabled = '{{ "true" if matcher_enabled else "false" }}' === 'true';
 
     // --- State ---
     let currentSort = { col: 4, asc: false };

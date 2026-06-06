@@ -1,52 +1,36 @@
 # Audiobookshelf Metadata Exporter
 
-A web tool to export `metadata.json` and `cover.jpg` files from your Audiobookshelf library to a chosen directory. Reads directly from Audiobookshelf's SQLite database — no CSV export step needed.
+Export `metadata.json` and `cover.jpg` files from your Audiobookshelf library while preserving the original folder structure. The application reads your library from the Audiobookshelf SQLite database and copies the corresponding files from the `.metadata/items` directory to the selected destination.
 
-## Prerequisites
-
-- Docker and Docker Compose
-- A running Audiobookshelf instance with its `absdatabase.sqlite` file accessible
 
 ## Quick Start
-
-### 1. Set up volume mounts
-
-Edit `docker-compose.yaml` and update the paths to match your Audiobookshelf installation:
-
-```yaml
-volumes:
-  - "./config:/config:ro"
-  - "./metadata:/metadata:ro"
-  - "./data/exported:/exported:rw"
-```
-
-- **config** — your Audiobookshelf config directory containing `absdatabase.sqlite` (same as your ABS `./config:/config` mount)
-- **metadata** — your Audiobookshelf metadata directory (same as your ABS `./metadata:/metadata` mount)
-- **exported** — where exported files will be written
-
-### 2. Create directories
-
-```bash
-mkdir -p data/exported
-```
-
-### 3. Start the container
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Open the web interface
+Then open [http://localhost:8080](http://localhost:8080).
 
-Navigate to [http://localhost:8080](http://localhost:8080).
+## Docker Compose
 
-## Usage
-
-1. **Select a library** from the dropdown on the home page
-2. **Browse items** — the table shows title, authors, series, published year, and path
-3. **Filter** using the search box or select/deselect all buttons
-4. **Set the export path** (defaults to `/exported`)
-5. **Click Export** — results show per-item status for `metadata.json` and `cover.jpg`
+```yaml
+services:
+  audiobookshelf-exporter:
+    image: ghcr.io/craftwork2720/audiobookshelf-meta-exporter:latest
+    container_name: audiobookshelf-exporter
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: 8080
+      ABS_DATABASE_PATH: /config/absdatabase.sqlite
+      ABS_ITEMS_PATH: /metadata/items
+      EXPORT_PATH: /exported
+    volumes:
+      - "./config:/config:ro"      # Audiobookshelf config
+      - "./metadata:/metadata:ro"  # Audiobookshelf metadata
+      - "./data/exported:/exported:rw"  # Export destination — creates a subfolder named after the library
+    restart: unless-stopped
+```
 
 ## Environment Variables
 
@@ -56,24 +40,13 @@ Navigate to [http://localhost:8080](http://localhost:8080).
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
-| `MATCHER_ENABLED` | `false` | Enable fuzzy matching of metadata against folder names |
-| `SECRET_KEY` | random | Flask secret key for session security |
+| `MATCHER_ENABLED` | `false` | Fuzzy matching of metadata against folder names — tuned for specific folder naming conventions, may not be useful for most setups (also toggleable in UI) |
+| `SECRET_KEY` | random | Flask session key |
 
-## Local Development (no Docker)
+## Usage
 
-```bash
-pip install -r requirements.txt
+1. Select a library from the dropdown
+2. Browse items — filter, search, and select what to export
+3. Set the export path and click **Export**
+4. Results show per-item status for `metadata.json` and `cover.jpg`
 
-# Set paths to your local data
-export ABS_DATABASE_PATH="./data/absdatabase.sqlite"
-export ABS_ITEMS_PATH="./data/items"
-export EXPORT_PATH="./data/exported"
-
-python app.py
-```
-
-## Building the Docker Image
-
-```bash
-docker compose -f docker-compose-build.yaml up --build
-```

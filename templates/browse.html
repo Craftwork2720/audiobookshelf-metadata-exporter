@@ -192,7 +192,7 @@
     const matcherEnabled = {{ 'true' if matcher_enabled else 'false' }};
 
     // --- State ---
-    let currentSort = { col: null, asc: true };
+    let currentSort = { col: 4, asc: false };
     let currentMatchFilter = 'all';
 
     // --- Core visibility ---
@@ -259,6 +259,9 @@
         th.style.cursor = 'pointer';
         th.addEventListener('click', () => sortTable(parseInt(th.dataset.col)));
     });
+
+    // Sort by Path A→Z on load
+    sortTable(4);
 
     // --- Match filter ---
     document.querySelectorAll('#match-filter [data-match]').forEach(btn => {

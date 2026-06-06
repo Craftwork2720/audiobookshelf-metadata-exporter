@@ -5,9 +5,12 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - "./data/absdatabase.sqlite:/config/absdatabase.sqlite:ro"
-      - "./data/items:/media/Audiobooks:ro"
-      - "./data/exported:/exported_audiobooks:rw"
+      - "./data/db:/db:ro"
+      - "./data/items:/items:ro"
+      - "./data/exported:/exported:rw"
     environment:
+      ABS_DATABASE_PATH: "/db/absdatabase.sqlite"
+      ABS_ITEMS_PATH: "/items"
+      EXPORT_PATH: "/exported"
       PORT: 8080
     restart: unless-stopped

@@ -6,7 +6,7 @@ the Audiobookshelf media folder to the export destination.
 import os
 import shutil
 
-MEDIA_ROOT = os.environ.get("ABS_MEDIA_ROOT", "/media/Audiobooks")
+MEDIA_ROOT = os.environ.get("ABS_ITEMS_PATH", "/items")
 
 
 def export_items(items, export_path):

@@ -5,9 +5,9 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - "/path/to/audiobookshelf/config/absdatabase.sqlite:/config/absdatabase.sqlite:ro"
-      - "/path/to/audiobookshelf/metadata/items:/media/Audiobooks:ro"
-      - "./data/exported:/exported_audiobooks:rw"
+      - "/path/to/audiobookshelf/config:/config:ro"
+      - "/path/to/audiobookshelf/metadata/items:/items:ro"
+      - "./data/exported:/exported:rw"
     environment:
       PORT: 8080
     restart: unless-stopped

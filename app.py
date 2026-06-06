@@ -17,7 +17,7 @@ import matcher
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
-DEFAULT_EXPORT_PATH = os.environ.get("ABS_EXPORT_PATH", "/exported_audiobooks")
+DEFAULT_EXPORT_PATH = os.environ.get("EXPORT_PATH", "/exported")
 
 # In-memory job store for export progress polling
 jobs = {}
@@ -27,7 +27,17 @@ jobs_lock = threading.Lock()
 @app.route("/")
 def index():
     """Landing page — library selector."""
-    libraries = db.get_book_libraries()
+    try:
+        libraries = db.get_book_libraries()
+    except Exception as e:
+        return render_template(
+            "error.html",
+            error_title="Database Not Found",
+            error_message=(
+                f"Could not connect to the Audiobookshelf database. "
+                f"Check that the file exists and is mounted correctly. ({e})"
+            ),
+        ), 500
     return render_template("index.html", libraries=libraries)
 
 

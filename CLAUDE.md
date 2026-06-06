@@ -14,7 +14,7 @@ pip install -r requirements.txt
 python app.py          # serves on http://localhost:8080
 
 # Docker (dev, local build)
-docker compose -f docker-compose-dev.yaml up --build
+docker compose -f docker-compose-build.yaml up --build
 
 # Docker (production, pre-built image)
 docker compose up -d
@@ -28,7 +28,7 @@ Four source files:
 
 - **`app.py`** — Flask routes: `/` (library selector), `/browse` (item browser), `/export/start` (background export), `/export/status/<job_id>` (polling). Uses Jinja2 templates in `templates/`.
 - **`db.py`** — SQLite database layer. Read-only queries against `absdatabase.sqlite` using Python's built-in `sqlite3`. Functions: `get_book_libraries()`, `get_items_by_library(library_id)`, `get_library_name(library_id)`.
-- **`exporter.py`** — File copy logic. Copies `metadata.json` and `cover.jpg` from `ABS_MEDIA_ROOT/{item_id}/` to the export destination. Provides both `export_items()` (synchronous) and `export_items_stream()` (generator yielding progress events).
+- **`exporter.py`** — File copy logic. Copies `metadata.json` and `cover.jpg` from `ABS_ITEMS_PATH/{item_id}/` to the export destination. Provides both `export_items()` (synchronous) and `export_items_stream()` (generator yielding progress events).
 - **`matcher.py`** — Fuzzy matching of ABS metadata (title, authors) against folder names parsed from `rel_path`. Uses normalization (diacritics removal, lowercasing), three similarity strategies (sequence ratio, partial ratio, token overlap), and classifies items as `match`, `partial`, `unknown`, or `no_meta`. Tuned for Polish audiobook folder naming conventions (noise patterns like `czyta`, `[audiobook PL]`, `superprodukcja`).
 
 ### Export flow
@@ -51,8 +51,8 @@ Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 |---|---|---|
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
-| `ABS_MEDIA_ROOT` | `/media/Audiobooks` | Path to audiobook metadata/items folder |
-| `ABS_EXPORT_PATH` | `/exported_audiobooks` | Default export destination in UI |
+| `ABS_ITEMS_PATH` | `/items` | Path to audiobook metadata/items folder |
+| `EXPORT_PATH` | `/exported` | Default export destination in UI |
 | `SECRET_KEY` | random | Flask secret key |
 
 ## Key Design Decisions

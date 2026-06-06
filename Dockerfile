@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV ABS_DATABASE_PATH="/config/absdatabase.sqlite"
-ENV ABS_MEDIA_ROOT="/media/Audiobooks"
-ENV ABS_EXPORT_PATH="/exported_audiobooks"
+ENV ABS_ITEMS_PATH="/items"
+ENV EXPORT_PATH="/exported"
 ENV PORT=8080
 
 EXPOSE 8080

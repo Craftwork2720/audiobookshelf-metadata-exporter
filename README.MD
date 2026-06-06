@@ -15,16 +15,16 @@ Edit `docker-compose.yaml` and update the paths to match your Audiobookshelf ins
 
 ```yaml
 volumes:
-  - "/path/to/audiobookshelf/config/absdatabase.sqlite:/config/absdatabase.sqlite:ro"
-  - "/path/to/audiobookshelf/metadata/items:/media/Audiobooks:ro"
-  - "./data/exported:/exported_audiobooks:rw"
+  - "/path/to/audiobookshelf/config:/config:ro"
+  - "/path/to/audiobookshelf/metadata/items:/items:ro"
+  - "./data/exported:/exported:rw"
 ```
 
-- **absdatabase.sqlite** — located in your Audiobookshelf config directory (typically `/config/absdatabase.sqlite` inside the ABS container)
+- **config** — your Audiobookshelf config directory containing `absdatabase.sqlite` (typically `/config` inside the ABS container)
 - **items** — the metadata items folder from your Audiobookshelf installation (typically `/metadata/items` inside the ABS container)
 - **exported** — where exported files will be written
 
-### 2. Create the export directory
+### 2. Create directories
 
 ```bash
 mkdir -p data/exported
@@ -45,7 +45,7 @@ Navigate to [http://localhost:8080](http://localhost:8080).
 1. **Select a library** from the dropdown on the home page
 2. **Browse items** — the table shows title, authors, series, published year, and path
 3. **Filter** using the search box or select/deselect all buttons
-4. **Set the export path** (defaults to `/exported_audiobooks`)
+4. **Set the export path** (defaults to `/exported`)
 5. **Click Export** — results show per-item status for `metadata.json` and `cover.jpg`
 
 ## Environment Variables
@@ -54,8 +54,8 @@ Navigate to [http://localhost:8080](http://localhost:8080).
 |---|---|---|
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
-| `ABS_MEDIA_ROOT` | `/media/Audiobooks` | Path to audiobook metadata/items folder |
-| `ABS_EXPORT_PATH` | `/exported_audiobooks` | Default export destination shown in UI |
+| `ABS_ITEMS_PATH` | `/items` | Path to audiobook metadata/items folder |
+| `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
 | `SECRET_KEY` | random | Flask secret key for session security |
 
 ## Local Development (no Docker)
@@ -65,8 +65,8 @@ pip install -r requirements.txt
 
 # Set paths to your local data
 export ABS_DATABASE_PATH="./data/absdatabase.sqlite"
-export ABS_MEDIA_ROOT="./data/items"
-export ABS_EXPORT_PATH="./data/exported"
+export ABS_ITEMS_PATH="./data/items"
+export EXPORT_PATH="./data/exported"
 
 python app.py
 ```
@@ -74,5 +74,5 @@ python app.py
 ## Building the Docker Image
 
 ```bash
-docker compose -f docker-compose-dev.yaml up --build
+docker compose -f docker-compose-build.yaml up --build
 ```

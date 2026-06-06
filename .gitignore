@@ -160,3 +160,4 @@ Thumbs.db
 Dockerfile
 docker-compose-dev.yml
 docker-compose-dev.yaml
+/CLAUDE.md

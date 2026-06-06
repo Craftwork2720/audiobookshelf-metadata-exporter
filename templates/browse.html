@@ -94,8 +94,16 @@
         </div>
     </div>
 
+    {# Loading spinner #}
+    <div id="loading-spinner" class="text-center py-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading…</span>
+        </div>
+        <div class="text-muted mt-2">Loading items…</div>
+    </div>
+
     {# Items table #}
-    <div class="table-responsive" id="items-table-wrapper">
+    <div class="table-responsive d-none" id="items-table-wrapper">
         <table class="table table-hover table-sm" id="items-table">
             <thead class="table-light">
                 <tr>
@@ -182,6 +190,10 @@
 
 {% block scripts %}
 <script>
+    // Hide spinner, show table
+    document.getElementById('loading-spinner').classList.add('d-none');
+    document.getElementById('items-table-wrapper').classList.remove('d-none');
+
     const checkboxes = document.querySelectorAll('.item-checkbox');
     const checkAll = document.getElementById('check-all');
     const searchInput = document.getElementById('search-input');

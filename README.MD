@@ -2,6 +2,8 @@
 
 Export `metadata.json` and `cover.jpg` files from your Audiobookshelf library while preserving the original folder structure. The application reads your library from the Audiobookshelf SQLite database and copies the corresponding files from the `.metadata/items` directory to the selected destination.
 
+![Demo](screenshot/ss_animation.gif)
+
 
 ## Quick Start
 

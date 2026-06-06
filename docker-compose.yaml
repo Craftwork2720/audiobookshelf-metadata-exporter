@@ -5,8 +5,13 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - "/path/to/audiobookshelf/config:/config:ro"
-      - "/path/to/audiobookshelf/metadata/items:/items:ro"
+      # Mount the same config directory as your Audiobookshelf instance.
+      # Contains absdatabase.sqlite — the exporter reads it in read-only mode.
+      - "./config:/config:ro"
+      # Mount the same metadata directory as your Audiobookshelf instance.
+      # Contains per-item folders with metadata.json and cover.jpg files.
+      - "./metadata:/metadata:ro"
+      # Export destination — must be writable.
       - "./data/exported:/exported:rw"
     environment:
       PORT: 8080

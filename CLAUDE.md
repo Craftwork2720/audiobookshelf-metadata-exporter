@@ -51,7 +51,7 @@ Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 |---|---|---|
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
-| `ABS_ITEMS_PATH` | `/items` | Path to audiobook metadata/items folder |
+| `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/exported` | Default export destination in UI |
 | `SECRET_KEY` | random | Flask secret key |
 

@@ -15,13 +15,13 @@ Edit `docker-compose.yaml` and update the paths to match your Audiobookshelf ins
 
 ```yaml
 volumes:
-  - "/path/to/audiobookshelf/config:/config:ro"
-  - "/path/to/audiobookshelf/metadata/items:/items:ro"
+  - "./config:/config:ro"
+  - "./metadata:/metadata:ro"
   - "./data/exported:/exported:rw"
 ```
 
-- **config** — your Audiobookshelf config directory containing `absdatabase.sqlite` (typically `/config` inside the ABS container)
-- **items** — the metadata items folder from your Audiobookshelf installation (typically `/metadata/items` inside the ABS container)
+- **config** — your Audiobookshelf config directory containing `absdatabase.sqlite` (same as your ABS `./config:/config` mount)
+- **metadata** — your Audiobookshelf metadata directory (same as your ABS `./metadata:/metadata` mount)
 - **exported** — where exported files will be written
 
 ### 2. Create directories
@@ -54,7 +54,7 @@ Navigate to [http://localhost:8080](http://localhost:8080).
 |---|---|---|
 | `PORT` | `8080` | Web server port |
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
-| `ABS_ITEMS_PATH` | `/items` | Path to audiobook metadata/items folder |
+| `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
 | `SECRET_KEY` | random | Flask secret key for session security |
 

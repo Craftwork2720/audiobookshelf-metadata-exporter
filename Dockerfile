@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 ENV ABS_DATABASE_PATH="/config/absdatabase.sqlite"
-ENV ABS_ITEMS_PATH="/items"
+ENV ABS_ITEMS_PATH="/metadata/items"
 ENV EXPORT_PATH="/exported"
 ENV PORT=8080
 

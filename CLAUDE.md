@@ -24,11 +24,16 @@ No tests, no linter, no CI are configured.
 
 ## Architecture
 
-Three source files:
+Four source files:
 
-- **`app.py`** — Flask routes (`/`, `/browse`, `/export`). Thin controller layer; delegates to `db` and `exporter` modules. Uses Jinja2 templates in `templates/`.
+- **`app.py`** — Flask routes: `/` (library selector), `/browse` (item browser), `/export/start` (background export), `/export/status/<job_id>` (polling). Uses Jinja2 templates in `templates/`.
 - **`db.py`** — SQLite database layer. Read-only queries against `absdatabase.sqlite` using Python's built-in `sqlite3`. Functions: `get_book_libraries()`, `get_items_by_library(library_id)`, `get_library_name(library_id)`.
-- **`exporter.py`** — File copy logic. Copies `metadata.json` and `cover.jpg` from `ABS_MEDIA_ROOT/{item_id}/` to the export destination.
+- **`exporter.py`** — File copy logic. Copies `metadata.json` and `cover.jpg` from `ABS_MEDIA_ROOT/{item_id}/` to the export destination. Provides both `export_items()` (synchronous) and `export_items_stream()` (generator yielding progress events).
+- **`matcher.py`** — Fuzzy matching of ABS metadata (title, authors) against folder names parsed from `rel_path`. Uses normalization (diacritics removal, lowercasing), three similarity strategies (sequence ratio, partial ratio, token overlap), and classifies items as `match`, `partial`, `unknown`, or `no_meta`. Tuned for Polish audiobook folder naming conventions (noise patterns like `czyta`, `[audiobook PL]`, `superprodukcja`).
+
+### Export flow
+
+Exports run in background threads via Python's `threading` module. An in-memory job store (`dict` + `threading.Lock`) tracks progress. The frontend polls `/export/status/<job_id>` every 500ms, receiving batches of up to 50 new results per call. Each result has an `overall_class` of `success`, `skipped`, or `error`.
 
 Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 
@@ -54,5 +59,6 @@ Templates use Bootstrap 5 via CDN. Static CSS in `static/style.css`.
 
 - **Direct SQLite access** — reads `absdatabase.sqlite` in read-only mode via `?mode=ro` URI. No CSV exports needed.
 - **Read-only source mounts** — database and media volumes are read-only; only the export directory is writable.
-- **Separate templates** — Jinja2 templates in `templates/`, Bootstrap 5 for styling.
+- **SQLite version requirement** — Audiobookshelf's DB uses trigger syntax requiring SQLite >= 3.45. The Dockerfile installs `libsqlite3` from Debian trixie to satisfy this (bookworm ships 3.40).
+- **No authentication** — the app has no auth layer; it's designed for trusted local/Docker network use.
 - **English UI** — all user-facing strings in English.

@@ -12,6 +12,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 
 import db
 import exporter
+import matcher
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
@@ -44,6 +45,13 @@ def browse():
     except Exception as e:
         flash(f"Database error: {e}", "danger")
         return redirect(url_for("index"))
+
+    for item in items:
+        item["match"] = matcher.compare(
+            item.get("title", ""),
+            item.get("authors", ""),
+            item.get("rel_path", ""),
+        )
 
     default_path = os.path.join(DEFAULT_EXPORT_PATH, library_name or "Unknown")
 

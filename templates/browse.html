@@ -86,6 +86,7 @@
                     <th>Title</th>
                     <th>Authors</th>
                     <th>Series</th>
+                    <th>Match</th>
                     <th>Published</th>
                     <th>Path</th>
                 </tr>
@@ -100,6 +101,22 @@
                     <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
                     <td class="item-authors">{{ item.authors or '—' }}</td>
                     <td class="item-series">{{ item.series or '—' }}</td>
+                    <td>
+                        {% set m = item.match %}
+                        {% if m.status == 'match' %}
+                            <span class="badge bg-success" title="Title: {{ m.title_score }} | Author: {{ m.author_score }}">&#10003;</span>
+                        {% elif m.status == 'partial' %}
+                            <span class="badge bg-warning text-dark"
+                                  title="Title: {{ m.title_score }} | Author: {{ m.author_score }} | Folder: {{ m.folder_author }} - {{ m.folder_title }}">
+                                &#9888;
+                            </span>
+                        {% else %}
+                            <span class="badge bg-secondary"
+                                  title="Could not parse: {{ m.folder_title }}">
+                                ?
+                            </span>
+                        {% endif %}
+                    </td>
                     <td>{{ item.published_year or '—' }}</td>
                     <td class="text-muted small">{{ item.rel_path }}</td>
                 </tr>

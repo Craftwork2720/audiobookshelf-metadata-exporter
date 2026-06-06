@@ -43,6 +43,12 @@
                     </div>
                 </div>
                 {% endif %}
+                <div class="col-md-auto">
+                    <a href="{{ url_for('browse', library_id=library_id, matcher='false' if matcher_enabled else 'true') }}"
+                       class="btn btn-sm {% if matcher_enabled %}btn-success{% else %}btn-outline-secondary{% endif %}">
+                        <i class="bi bi-search"></i> Matcher {% if matcher_enabled %}ON{% else %}OFF{% endif %}
+                    </a>
+                </div>
                 <div class="col">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="bi bi-folder"></i> Export to</span>

@@ -42,13 +42,20 @@ def index():
     return render_template("index.html", libraries=libraries)
 
 
-@app.route("/browse", methods=["POST"])
+@app.route("/browse", methods=["GET", "POST"])
 def browse():
     """Show items for the selected library."""
-    library_id = request.form.get("library_id")
+    library_id = request.form.get("library_id") or request.args.get("library_id")
     if not library_id:
         flash("Please select a library.", "warning")
         return redirect(url_for("index"))
+
+    # UI toggle overrides env var default
+    matcher_param = request.args.get("matcher")
+    if matcher_param is not None:
+        matcher_enabled = matcher_param.lower() in ("true", "1", "yes")
+    else:
+        matcher_enabled = MATCHER_ENABLED
 
     try:
         library_name = db.get_library_name(library_id)
@@ -57,7 +64,7 @@ def browse():
         flash(f"Database error: {e}", "danger")
         return redirect(url_for("index"))
 
-    if MATCHER_ENABLED:
+    if matcher_enabled:
         for item in items:
             item["match"] = matcher.compare(
                 item.get("title", ""),
@@ -73,7 +80,7 @@ def browse():
         library_id=library_id,
         library_name=library_name or "Unknown Library",
         default_export_path=default_path,
-        matcher_enabled=MATCHER_ENABLED,
+        matcher_enabled=matcher_enabled,
     )
 
 

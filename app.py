@@ -18,6 +18,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
 DEFAULT_EXPORT_PATH = os.environ.get("EXPORT_PATH", "/exported")
+MATCHER_ENABLED = os.environ.get("MATCHER_ENABLED", "false").lower() in ("true", "1", "yes")
 
 # In-memory job store for export progress polling
 jobs = {}
@@ -56,12 +57,13 @@ def browse():
         flash(f"Database error: {e}", "danger")
         return redirect(url_for("index"))
 
-    for item in items:
-        item["match"] = matcher.compare(
-            item.get("title", ""),
-            item.get("authors", ""),
-            item.get("rel_path", ""),
-        )
+    if MATCHER_ENABLED:
+        for item in items:
+            item["match"] = matcher.compare(
+                item.get("title", ""),
+                item.get("authors", ""),
+                item.get("rel_path", ""),
+            )
 
     default_path = os.path.join(DEFAULT_EXPORT_PATH, library_name or "Unknown")
 
@@ -71,6 +73,7 @@ def browse():
         library_id=library_id,
         library_name=library_name or "Unknown Library",
         default_export_path=default_path,
+        matcher_enabled=MATCHER_ENABLED,
     )
 
 

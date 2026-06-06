@@ -7,6 +7,6 @@ docker buildx build . \
 
 docker buildx build . \
   --platform linux/amd64,linux/arm64 \
-  --tag ghcr.io/craftwork2720/audiobookshelf-meta-exporter:v0.2.5 \
+  --tag ghcr.io/craftwork2720/audiobookshelf-meta-exporter:v0.2.6 \
   --tag ghcr.io/craftwork2720/audiobookshelf-meta-exporter:latest \
-  --push  --push  --push  --push --push
+  --push

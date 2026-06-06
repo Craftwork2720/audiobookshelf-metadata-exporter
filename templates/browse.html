@@ -32,6 +32,7 @@
                         </button>
                     </div>
                 </div>
+                {% if matcher_enabled %}
                 <div class="col-md-auto">
                     <div class="btn-group btn-group-sm" id="match-filter">
                         <button type="button" class="btn btn-outline-secondary active" data-match="all">All</button>
@@ -41,6 +42,7 @@
                         <button type="button" class="btn btn-outline-dark" data-match="unknown">?</button>
                     </div>
                 </div>
+                {% endif %}
                 <div class="col">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text"><i class="bi bi-folder"></i> Export to</span>
@@ -95,7 +97,9 @@
                     <th class="sortable" data-col="0">Title <span class="sort-icon">&#8597;</span></th>
                     <th class="sortable" data-col="1">Authors <span class="sort-icon">&#8597;</span></th>
                     <th class="sortable" data-col="2">Series <span class="sort-icon">&#8597;</span></th>
+                    {% if matcher_enabled %}
                     <th class="sortable" data-col="5">Match <span class="sort-icon">&#8597;</span></th>
+                    {% endif %}
                     <th class="sortable" data-col="3">Published <span class="sort-icon">&#8597;</span></th>
                     <th class="sortable" data-col="4">Path <span class="sort-icon">&#8597;</span></th>
                 </tr>
@@ -108,17 +112,18 @@
                     data-series="{{ item.series or '' }}"
                     data-published="{{ item.published_year or '' }}"
                     data-path="{{ item.rel_path or '' }}"
-                    data-match="{{ item.match.status }}">
+                    {% if matcher_enabled %}data-match="{{ item.match.status }}"{% endif %}>
                     <td>
                         <input type="checkbox" name="item_ids" value="{{ item.id }}"
                                class="form-check-input item-checkbox">
                     </td>
                     <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
-                    <td class="item-authors {% if item.match.author_score is not none and item.match.author_score < 0.55 and not item.match.lektor_author %}table-danger{% endif %}"
-                        title="{% if item.match.author_score is not none %}Author match score: {{ item.match.author_score }}{% endif %}">
+                    <td class="item-authors{% if matcher_enabled and item.match.author_score is not none and item.match.author_score < 0.55 and not item.match.lektor_author %} table-danger{% endif %}"
+                        {% if matcher_enabled and item.match.author_score is not none %}title="Author match score: {{ item.match.author_score }}"{% endif %}>
                         {{ item.authors or '—' }}
                     </td>
                     <td class="item-series">{{ item.series or '—' }}</td>
+                    {% if matcher_enabled %}
                     <td>
                         {% set m = item.match %}
                         {% if m.status == 'match' %}
@@ -138,6 +143,7 @@
                             <span class="badge bg-info ms-1" title="Author field contains narrator name">&#127908;</span>
                         {% endif %}
                     </td>
+                    {% endif %}
                     <td>{{ item.published_year or '—' }}</td>
                     <td class="text-muted small">{{ item.rel_path }}</td>
                 </tr>
@@ -177,6 +183,7 @@
     const btnExport = document.getElementById('btn-export');
     const btnExportTop = document.getElementById('btn-export-top');
     const exportForm = document.getElementById('export-form');
+    const matcherEnabled = {{ 'true' if matcher_enabled else 'false' }};
 
     // --- State ---
     let currentSort = { col: null, asc: true };
@@ -202,7 +209,10 @@
     function sortTable(colIndex) {
         const tbody = document.querySelector('#items-table tbody');
         const rows = Array.from(tbody.querySelectorAll('.item-row'));
-        const colKey = ['title','authors','series','published','path','match'][colIndex];
+        const colKeys = matcherEnabled
+            ? ['title','authors','series','published','path','match']
+            : ['title','authors','series','published','path'];
+        const colKey = colKeys[colIndex];
 
         if (currentSort.col === colIndex) {
             currentSort.asc = !currentSort.asc;

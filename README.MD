@@ -56,6 +56,7 @@ Navigate to [http://localhost:8080](http://localhost:8080).
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
+| `MATCHER_ENABLED` | `false` | Enable fuzzy matching of metadata against folder names |
 | `SECRET_KEY` | random | Flask secret key for session security |
 
 ## Local Development (no Docker)

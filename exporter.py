@@ -49,6 +49,64 @@ def export_items(items, export_path):
     return results, {"metadata": metadata_copied, "cover": cover_copied}
 
 
+def export_items_stream(items, export_path):
+    """
+    Generator that exports items one by one, yielding progress events.
+
+    Yields dicts with:
+      - type: "progress" | "error" | "done"
+      - For "progress": current, total, result (single item result)
+      - For "error": message
+      - For "done": results, counts, file_counts
+    """
+    total = len(items)
+
+    if not os.path.isdir(export_path):
+        try:
+            os.makedirs(export_path, exist_ok=True)
+        except Exception as e:
+            yield {"type": "error", "message": f"Cannot create export directory: {e}"}
+            return
+
+    results = []
+    metadata_copied = 0
+    cover_copied = 0
+
+    for i, item in enumerate(items):
+        result = _export_single_item(item, export_path)
+        results.append(result)
+
+        if result.get("metadata_copied"):
+            metadata_copied += 1
+        if result.get("cover_copied"):
+            cover_copied += 1
+
+        yield {
+            "type": "progress",
+            "current": i + 1,
+            "total": total,
+            "result": result,
+        }
+
+        try:
+            import gevent
+            gevent.sleep(0)
+        except ImportError:
+            pass
+
+    counts = {"success": 0, "skipped": 0, "error": 0}
+    for r in results:
+        cls = r.get("overall_class", "error")
+        if cls in counts:
+            counts[cls] += 1
+
+    yield {
+        "type": "done",
+        "counts": counts,
+        "file_counts": {"metadata": metadata_copied, "cover": cover_copied},
+    }
+
+
 def _export_single_item(item, export_path):
     """Copy metadata.json and cover.jpg for one item."""
     item_id = item["id"]

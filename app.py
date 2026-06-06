@@ -6,6 +6,8 @@ metadata.json / cover.jpg files to a specified directory.
 """
 
 import os
+import threading
+import uuid
 from flask import Flask, render_template, request, redirect, url_for, flash
 
 import db
@@ -15,6 +17,10 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
 
 DEFAULT_EXPORT_PATH = os.environ.get("ABS_EXPORT_PATH", "/exported_audiobooks")
+
+# In-memory job store for export progress polling
+jobs = {}
+jobs_lock = threading.Lock()
 
 
 @app.route("/")
@@ -39,58 +45,104 @@ def browse():
         flash(f"Database error: {e}", "danger")
         return redirect(url_for("index"))
 
+    default_path = os.path.join(DEFAULT_EXPORT_PATH, library_name or "Unknown")
+
     return render_template(
         "browse.html",
         items=items,
         library_id=library_id,
         library_name=library_name or "Unknown Library",
-        default_export_path=DEFAULT_EXPORT_PATH,
+        default_export_path=default_path,
     )
 
 
-@app.route("/export", methods=["POST"])
-def export_items():
-    """Export selected items and show results."""
+@app.route("/export/start", methods=["POST"])
+def export_start():
+    """Start export in background thread, return job_id."""
     library_id = request.form.get("library_id")
     export_path = request.form.get("export_path", "").strip()
+    select_all = request.form.get("select_all") == "true"
     item_ids = request.form.getlist("item_ids")
 
-    if not item_ids:
-        flash("No items selected.", "warning")
-        return redirect(url_for("index"))
+    if (not select_all and not item_ids) or not export_path:
+        return {"error": "Missing items or path"}, 400
 
-    if not export_path:
-        flash("Export path is required.", "warning")
-        return redirect(url_for("index"))
-
-    # Get full item data for the selected IDs
     try:
+        library_name = db.get_library_name(library_id)
         all_items = db.get_items_by_library(library_id)
     except Exception as e:
-        flash(f"Database error: {e}", "danger")
-        return redirect(url_for("index"))
+        return {"error": str(e)}, 500
 
-    selected_items = [item for item in all_items if item["id"] in item_ids]
+    if select_all:
+        selected_items = all_items
+    else:
+        id_set = set(item_ids)
+        selected_items = [item for item in all_items if item["id"] in id_set]
 
-    # Run export
-    results, file_counts = exporter.export_items(selected_items, export_path)
+    export_path = os.path.join(export_path, library_name or "Unknown")
 
-    # Count by status class
-    counts = {"success": 0, "skipped": 0, "error": 0}
-    for r in results:
-        cls = r.get("overall_class", "error")
-        if cls in counts:
-            counts[cls] += 1
+    job_id = str(uuid.uuid4())
+    job = {
+        "status": "running",
+        "current": 0,
+        "total": len(selected_items),
+        "results": [],
+        "counts": {"success": 0, "skipped": 0, "error": 0},
+        "file_counts": {"metadata": 0, "cover": 0},
+    }
+    with jobs_lock:
+        jobs[job_id] = job
 
-    return render_template(
-        "results.html",
-        results=results,
-        counts=counts,
-        file_counts=file_counts,
-        library_id=library_id,
-    )
+    def run():
+        for event in exporter.export_items_stream(selected_items, export_path):
+            with jobs_lock:
+                if event["type"] == "progress":
+                    job["current"] = event["current"]
+                    job["total"] = event["total"]
+                    job["results"].append(event["result"])
+                elif event["type"] == "done":
+                    job["counts"] = event["counts"]
+                    job["file_counts"] = event["file_counts"]
+                    job["status"] = "done"
+                elif event["type"] == "error":
+                    job["status"] = "error"
+                    job["error"] = event["message"]
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"job_id": job_id}
+
+
+@app.route("/export/status/<job_id>")
+def export_status(job_id):
+    """Poll export progress."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return {"error": "Job not found"}, 404
+    return {
+        "status": job["status"],
+        "current": job["current"],
+        "total": job["total"],
+        "error": job.get("error"),
+    }
+
+
+@app.route("/export/result/<job_id>")
+def export_result(job_id):
+    """Get final export results."""
+    with jobs_lock:
+        job = jobs.get(job_id)
+    if not job:
+        return {"error": "Job not found"}, 404
+    if job["status"] != "done":
+        return {"error": "Not finished yet"}, 400
+    return {
+        "results": job["results"],
+        "counts": job["counts"],
+        "file_counts": job["file_counts"],
+    }
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

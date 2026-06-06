@@ -18,4 +18,4 @@ ENV ABS_EXPORT_PATH="/exported_audiobooks"
 ENV PORT=8080
 
 EXPOSE 8080
-CMD ["python", "app.py"]
+CMD ["waitress-serve", "--host=0.0.0.0", "--port=8080", "--threads=4", "app:app"]

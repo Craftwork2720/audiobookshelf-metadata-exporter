@@ -10,7 +10,7 @@
     </a>
 </div>
 
-<form method="POST" action="{{ url_for('export_items') }}" id="export-form">
+<form id="export-form">
     <input type="hidden" name="library_id" value="{{ library_id }}">
 
     {# Toolbar #}
@@ -40,8 +40,42 @@
         </div>
     </div>
 
+    {# Progress bar (hidden by default) #}
+    <div class="card mb-3 d-none" id="progress-card">
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-1">
+                <span id="progress-label">Exporting…</span>
+                <span id="progress-count">0 / 0</span>
+            </div>
+            <div class="progress mb-2" style="height: 24px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                     id="progress-bar" role="progressbar" style="width: 0%">0%</div>
+            </div>
+            <div id="progress-current" class="text-muted small"></div>
+        </div>
+    </div>
+
+    {# Results (hidden by default, shown after export) #}
+    <div id="export-results" class="d-none">
+        <div class="row g-3 mb-4" id="results-summary"></div>
+        <div class="table-responsive">
+            <table class="table table-sm" id="results-table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Title</th>
+                        <th>Path</th>
+                        <th>metadata.json</th>
+                        <th>cover.jpg</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="results-body"></tbody>
+            </table>
+        </div>
+    </div>
+
     {# Items table #}
-    <div class="table-responsive">
+    <div class="table-responsive" id="items-table-wrapper">
         <table class="table table-hover table-sm" id="items-table">
             <thead class="table-light">
                 <tr>
@@ -72,7 +106,7 @@
     </div>
 
     {% if items %}
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-4" id="export-controls">
         <span class="text-muted" id="selection-count">0 selected</span>
         <button type="submit" class="btn btn-success" id="btn-export" disabled>
             <i class="bi bi-download"></i> Export Selected
@@ -91,6 +125,7 @@
     const searchInput = document.getElementById('search-input');
     const selectionCount = document.getElementById('selection-count');
     const btnExport = document.getElementById('btn-export');
+    const exportForm = document.getElementById('export-form');
 
     function updateCount() {
         const checked = document.querySelectorAll('.item-checkbox:checked').length;
@@ -129,5 +164,155 @@
             row.style.display = text.includes(q) ? '' : 'none';
         });
     });
+
+    // Export via polling
+    exportForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const allCheckboxes = document.querySelectorAll('.item-checkbox');
+        const checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
+        if (checkedBoxes.length === 0) return;
+
+        const formData = new FormData();
+        formData.append('library_id', document.querySelector('[name=library_id]').value);
+        formData.append('export_path', document.querySelector('[name=export_path]').value);
+
+        if (checkedBoxes.length === allCheckboxes.length) {
+            formData.append('select_all', 'true');
+        } else {
+            checkedBoxes.forEach(cb => formData.append('item_ids', cb.value));
+        }
+
+        // Show progress, hide table & controls
+        document.getElementById('progress-card').classList.remove('d-none');
+        document.getElementById('items-table-wrapper').classList.add('d-none');
+        document.getElementById('export-controls').classList.add('d-none');
+        document.getElementById('export-results').classList.add('d-none');
+        document.getElementById('search-input').closest('.card').classList.add('d-none');
+
+        const progressBar = document.getElementById('progress-bar');
+        const progressCount = document.getElementById('progress-count');
+        const progressLabel = document.getElementById('progress-label');
+        const progressCurrent = document.getElementById('progress-current');
+
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        progressCount.textContent = '0 / ' + checkedBoxes.length;
+        progressLabel.textContent = 'Exporting…';
+        progressCurrent.textContent = '';
+
+        function showError(msg) {
+            progressLabel.textContent = 'Error: ' + msg;
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+        }
+
+        // 1. Start job
+        let startResp;
+        try {
+            startResp = await fetch('/export/start', { method: 'POST', body: formData });
+        } catch (err) {
+            showError(err.message);
+            return;
+        }
+        const startData = await startResp.json();
+        if (startData.error) { showError(startData.error); return; }
+
+        const jobId = startData.job_id;
+
+        // 2. Poll status every 500ms
+        const poll = setInterval(async () => {
+            try {
+                const s = await fetch(`/export/status/${jobId}`).then(r => r.json());
+
+                if (s.error) { clearInterval(poll); showError(s.error); return; }
+
+                const pct = s.total ? Math.round((s.current / s.total) * 100) : 0;
+                progressBar.style.width = pct + '%';
+                progressBar.textContent = pct + '%';
+                progressCount.textContent = s.current + ' / ' + s.total;
+
+                if (s.status === 'done') {
+                    clearInterval(poll);
+                    const res = await fetch(`/export/result/${jobId}`).then(r => r.json());
+                    finishExport(res.results, res.counts, res.file_counts);
+                } else if (s.status === 'error') {
+                    clearInterval(poll);
+                    showError(s.error || 'Export failed');
+                }
+            } catch (err) {
+                clearInterval(poll);
+                showError(err.message);
+            }
+        }, 500);
+    });
+
+    function finishExport(results, counts, fileCounts) {
+        const progressBar = document.getElementById('progress-bar');
+        const progressLabel = document.getElementById('progress-label');
+
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+        progressBar.classList.remove('progress-bar-animated');
+        progressBar.classList.add('bg-success');
+        progressLabel.textContent = 'Export complete!';
+
+        // Show summary
+        if (counts) {
+            const summary = document.getElementById('results-summary');
+            summary.innerHTML = `
+                <div class="col-md-3"><div class="card text-center"><div class="card-body">
+                    <div class="display-6">${results.length}</div><div class="text-muted">Total Items</div>
+                </div></div></div>
+                <div class="col-md-3"><div class="card text-center border-success"><div class="card-body">
+                    <div class="display-6 text-success">${counts.success}</div><div class="text-muted">Succeeded</div>
+                </div></div></div>
+                <div class="col-md-3"><div class="card text-center border-warning"><div class="card-body">
+                    <div class="display-6 text-warning">${counts.skipped}</div><div class="text-muted">Skipped</div>
+                </div></div></div>
+                <div class="col-md-3"><div class="card text-center border-danger"><div class="card-body">
+                    <div class="display-6 text-danger">${counts.error}</div><div class="text-muted">Errors</div>
+                </div></div></div>
+            `;
+
+            if (fileCounts) {
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-info mb-3';
+                alert.innerHTML = `<i class="bi bi-files"></i> <strong>${fileCounts.metadata}</strong> metadata files and <strong>${fileCounts.cover}</strong> cover images copied.`;
+                summary.after(alert);
+            }
+        }
+
+        // Show results table
+        const tbody = document.getElementById('results-body');
+        tbody.innerHTML = '';
+        for (const r of results) {
+            const metaBadge = badgeFor(r.metadata_status);
+            const coverBadge = badgeFor(r.cover_status);
+            const statusBadge = overallBadge(r);
+            tbody.innerHTML += `<tr>
+                <td>${r.title || '—'}</td>
+                <td class="text-muted small">${r.rel_path || '—'}</td>
+                <td>${metaBadge}</td><td>${coverBadge}</td><td>${statusBadge}</td>
+            </tr>`;
+        }
+
+        document.getElementById('export-results').classList.remove('d-none');
+    }
+
+    function badgeFor(status) {
+        if (status === 'Copied') return '<span class="badge bg-success">Copied</span>';
+        if (status === 'Already exists') return '<span class="badge bg-info">Exists</span>';
+        if (status === 'Not found') return '<span class="badge bg-secondary">Missing</span>';
+        return '<span class="badge bg-danger">' + status + '</span>';
+    }
+
+    function overallBadge(r) {
+        const cls = r.overall_class;
+        if (cls === 'success') return '<span class="badge bg-success">OK</span>';
+        if (cls === 'error') return '<span class="badge bg-danger">' + r.overall_status + '</span>';
+        if (cls === 'skipped') return '<span class="badge bg-warning text-dark">Skipped</span>';
+        return '<span class="badge bg-info">' + r.overall_status + '</span>';
+    }
 </script>
 {% endblock %}

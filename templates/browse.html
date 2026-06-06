@@ -321,10 +321,37 @@
         updateCount();
     });
 
-    checkboxes.forEach(cb => cb.addEventListener('change', () => {
-        updateCount();
-        updateCheckAllState();
-    }));
+    // --- Shift/Ctrl multi-select ---
+    let lastChecked = null;
+
+    function getVisibleCheckboxes() {
+        return Array.from(document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox'));
+    }
+
+    document.querySelectorAll('.item-checkbox').forEach(cb => {
+        cb.addEventListener('click', function(e) {
+            const visible = getVisibleCheckboxes();
+            if (e.shiftKey && lastChecked) {
+                // Shift+click: select range from last clicked to current
+                const start = visible.indexOf(lastChecked);
+                const end = visible.indexOf(this);
+                if (start !== -1 && end !== -1) {
+                    const [lo, hi] = start < end ? [start, end] : [end, start];
+                    const shouldBeChecked = lastChecked.checked;
+                    for (let i = lo; i <= hi; i++) {
+                        visible[i].checked = shouldBeChecked;
+                    }
+                }
+            } else if (!e.ctrlKey && !e.metaKey) {
+                // Plain click: deselect others, select only this one
+                visible.forEach(c => { if (c !== this) c.checked = false; });
+                this.checked = true;
+            }
+            lastChecked = this;
+            updateCount();
+            updateCheckAllState();
+        });
+    });
 
     // --- Export via polling ---
     exportForm.addEventListener('submit', async function(e) {

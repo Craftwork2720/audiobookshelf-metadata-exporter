@@ -40,7 +40,7 @@ services:
 | `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
 | `ABS_ITEMS_PATH` | `/metadata/items` | Path to audiobook metadata/items folder |
 | `EXPORT_PATH` | `/exported` | Default export destination shown in UI |
-| `MATCHER_ENABLED` | `false` | Fuzzy matching of metadata against folder names — tuned for specific folder naming conventions, may not be useful for most setups (also toggleable in UI) |
+| `MATCHER_ENABLED` | `false` | Compares title and author from metadata against folder names to flag mismatches. Tuned for specific naming conventions — edit `matcher.py` patterns to match your folder structure (also toggleable in UI) |
 | `SECRET_KEY` | random | Flask session key |
 
 ## Usage

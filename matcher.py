@@ -169,13 +169,22 @@ def _is_no_metadata(title, rel_path):
     """Detect items where ABS used the folder name as the title."""
     if not title:
         return False
+    # Title contains raw folder markers → no real metadata
     if re.search(r"\[audiobook|\(\d{4}\)", title, re.IGNORECASE):
         return True
     if re.search(r".+ - .+ \(\d{4}\)", title):
         return True
+    # Title closely matches last folder segment — but only if the folder
+    # segment is essentially the same as the title (no extra "Book N", "Author -")
     segments = [s for s in rel_path.replace("\\", "/").split("/") if s.strip()]
-    if segments and _ratio(title, segments[-1]) > 0.85:
-        return True
+    if segments:
+        raw_last = segments[-1]
+        # Folder has "Book N" or " - " separator → it has structure, not no_meta
+        if re.search(r"\bbook\s+\d+", raw_last, re.IGNORECASE) or " - " in raw_last:
+            return False
+        cleaned_last = _clean_segment(raw_last)
+        if _ratio(title, cleaned_last) > 0.85:
+            return True
     return False
 
 

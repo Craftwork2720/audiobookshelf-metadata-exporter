@@ -109,7 +109,7 @@ def browse():
 
 @app.route("/export/zip", methods=["POST"])
 def export_zip():
-    """Generate a ZIP archive and save it to the export directory."""
+    """Start ZIP export in background thread, return job_id."""
     library_id = request.form.get("library_id")
     export_path = request.form.get("export_path", "").strip()
     select_all = request.form.get("select_all") == "true"
@@ -132,26 +132,42 @@ def export_zip():
         id_set = set(item_ids)
         selected_items = [item for item in all_items if item["id"] in id_set]
 
-    zip_buf, counts, file_counts, results = exporter.export_to_zip(selected_items)
     date_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"{library_name or 'export'}_{date_str}.zip"
+    zip_path = os.path.join(export_path, filename)
 
-    # Save ZIP to export directory
-    try:
-        os.makedirs(export_path, exist_ok=True)
-        dest = os.path.join(export_path, filename)
-        with open(dest, "wb") as f:
-            f.write(zip_buf.read())
-    except Exception as e:
-        return {"error": f"Cannot save ZIP: {e}"}, 500
-
-    return {
-        "success": True,
-        "file": dest,
-        "counts": counts,
-        "file_counts": file_counts,
-        "results": results,
+    job_id = str(uuid.uuid4())
+    job = {
+        "status": "running",
+        "current": 0,
+        "total": len(selected_items),
+        "results": [],
+        "results_offset": 0,
+        "counts": {"success": 0, "skipped": 0, "error": 0},
+        "file_counts": {"metadata": 0, "cover": 0},
+        "zip_path": zip_path,
     }
+    with jobs_lock:
+        jobs[job_id] = job
+
+    def run():
+        for event in exporter.export_to_zip_stream(selected_items, zip_path):
+            with jobs_lock:
+                if event["type"] == "progress":
+                    job["current"] = event["current"]
+                    job["total"] = event["total"]
+                    job["results"].append(event["result"])
+                elif event["type"] == "done":
+                    job["counts"] = event["counts"]
+                    job["file_counts"] = event["file_counts"]
+                    job["zip_path"] = event["zip_path"]
+                    job["status"] = "done"
+                elif event["type"] == "error":
+                    job["status"] = "error"
+                    job["error"] = event["message"]
+
+    threading.Thread(target=run, daemon=True).start()
+    return {"job_id": job_id, "zip": True}
 
 
 @app.route("/export/start", methods=["POST"])
@@ -229,6 +245,7 @@ def export_status(job_id):
         "file_counts": job["file_counts"],
         "new_results": batch,
         "error": job.get("error"),
+        "zip_path": job.get("zip_path"),
     }
 
 

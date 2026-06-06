@@ -451,7 +451,7 @@
         }, 500);
     });
 
-    // --- ZIP export (save to server) ---
+    // --- ZIP export (save to server, with progress polling) ---
     function exportZip() {
         const checkedBoxes = document.querySelectorAll('.item-checkbox:checked');
         if (checkedBoxes.length === 0) return;
@@ -467,84 +467,112 @@
             checkedBoxes.forEach(cb => formData.append('item_ids', cb.value));
         }
 
-        // Show progress, hide table
-        const progressCard = document.getElementById('progress-card');
-        const progressBar = document.getElementById('progress-bar');
-        const progressLabel = document.getElementById('progress-label');
-        const progressCount = document.getElementById('progress-count');
-
-        progressCard.classList.remove('d-none');
+        // Show progress, hide table & controls
+        document.getElementById('progress-card').classList.remove('d-none');
         document.getElementById('items-table-wrapper').classList.add('d-none');
         document.getElementById('export-controls').classList.add('d-none');
         document.getElementById('export-results').classList.add('d-none');
         document.getElementById('search-input').closest('.card').classList.add('d-none');
 
-        progressBar.style.width = '0%';
-        progressBar.textContent = '';
-        progressBar.classList.add('progress-bar-animated');
-        progressBar.classList.remove('bg-success', 'bg-danger');
-        progressLabel.textContent = 'Generating ZIP…';
-        progressCount.textContent = checkedBoxes.length + ' items';
+        const progressBar = document.getElementById('progress-bar');
+        const progressCount = document.getElementById('progress-count');
+        const progressLabel = document.getElementById('progress-label');
 
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        progressCount.textContent = '0 / ' + checkedBoxes.length;
+        progressLabel.textContent = 'Generating ZIP…';
+
+        function showError(msg) {
+            progressLabel.textContent = 'Error: ' + msg;
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-danger');
+        }
+
+        // 1. Start job
         fetch('/export/zip', { method: 'POST', body: formData })
             .then(resp => resp.json())
-            .then(data => {
-                if (data.error) {
-                    progressLabel.textContent = 'Error: ' + data.error;
-                    progressBar.classList.remove('progress-bar-animated');
-                    progressBar.classList.add('bg-danger');
-                } else {
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '100%';
-                    progressBar.classList.remove('progress-bar-animated');
-                    progressBar.classList.add('bg-success');
-                    progressLabel.textContent = 'ZIP saved!';
+            .then(startData => {
+                if (startData.error) { showError(startData.error); return; }
 
-                    const summary = document.getElementById('results-summary');
-                    const c = data.counts;
-                    const fc = data.file_counts;
-                    summary.innerHTML = `
-                        <div class="col-md-3"><div class="card text-center"><div class="card-body">
-                            <div class="display-6">${c.success + c.skipped + c.error}</div><div class="text-muted">Total Items</div>
-                        </div></div></div>
-                        <div class="col-md-3"><div class="card text-center border-success"><div class="card-body">
-                            <div class="display-6 text-success">${c.success}</div><div class="text-muted">In ZIP</div>
-                        </div></div></div>
-                        <div class="col-md-3"><div class="card text-center border-warning"><div class="card-body">
-                            <div class="display-6 text-warning">${c.skipped}</div><div class="text-muted">Skipped</div>
-                        </div></div></div>
-                        <div class="col-md-6"><div class="card border-info"><div class="card-body">
-                            <i class="bi bi-file-zip"></i> <strong>${data.file}</strong><br>
-                            <span class="text-muted">${fc.metadata} metadata files, ${fc.cover} cover images</span>
-                        </div></div></div>
-                    `;
+                const jobId = startData.job_id;
+                const allResults = [];
 
-                    // Build results table sorted A→Z
-                    if (data.results && data.results.length > 0) {
-                        data.results.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
-                        const tbody = document.getElementById('results-body');
-                        tbody.innerHTML = '';
-                        for (const r of data.results) {
-                            const tr = document.createElement('tr');
-                            tr.innerHTML = `
-                                <td>${r.title || '—'}</td>
-                                <td class="text-muted small">${r.rel_path || '—'}</td>
-                                <td>${badgeFor(r.metadata_status)}</td>
-                                <td>${badgeFor(r.cover_status)}</td>
-                                <td>${overallBadge(r)}</td>`;
-                            tbody.appendChild(tr);
+                // 2. Poll status every 500ms
+                const poll = setInterval(async () => {
+                    try {
+                        const s = await fetch(`/export/status/${jobId}`).then(r => r.json());
+
+                        if (s.error && s.status !== 'done') { clearInterval(poll); showError(s.error); return; }
+
+                        const pct = s.total ? Math.round((s.current / s.total) * 100) : 0;
+                        progressBar.style.width = pct + '%';
+                        progressBar.textContent = pct + '%';
+                        progressCount.textContent = s.current + ' / ' + s.total;
+
+                        if (s.new_results && s.new_results.length > 0) {
+                            allResults.push(...s.new_results);
                         }
-                    }
 
-                    document.getElementById('export-results').classList.remove('d-none');
-                    document.getElementById('results-table').classList.remove('d-none');
-                }
+                        if (s.status === 'done') {
+                            clearInterval(poll);
+                            // Show results with zip_path
+                            progressBar.style.width = '100%';
+                            progressBar.textContent = '100%';
+                            progressBar.classList.remove('progress-bar-animated');
+                            progressBar.classList.add('bg-success');
+                            progressLabel.textContent = 'ZIP saved!';
+
+                            const summary = document.getElementById('results-summary');
+                            const c = s.counts;
+                            const fc = s.file_counts;
+                            summary.innerHTML = `
+                                <div class="col-md-3"><div class="card text-center"><div class="card-body">
+                                    <div class="display-6">${c.success + c.skipped + c.error}</div><div class="text-muted">Total Items</div>
+                                </div></div></div>
+                                <div class="col-md-3"><div class="card text-center border-success"><div class="card-body">
+                                    <div class="display-6 text-success">${c.success}</div><div class="text-muted">In ZIP</div>
+                                </div></div></div>
+                                <div class="col-md-3"><div class="card text-center border-warning"><div class="card-body">
+                                    <div class="display-6 text-warning">${c.skipped}</div><div class="text-muted">Skipped</div>
+                                </div></div></div>
+                                <div class="col-md-6"><div class="card border-info"><div class="card-body">
+                                    <i class="bi bi-file-zip"></i> <strong>${s.zip_path || ''}</strong><br>
+                                    <span class="text-muted">${fc.metadata} metadata files, ${fc.cover} cover images</span>
+                                </div></div></div>
+                            `;
+
+                            // Build results table sorted A→Z
+                            if (allResults.length > 0) {
+                                allResults.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+                                const tbody = document.getElementById('results-body');
+                                tbody.innerHTML = '';
+                                for (const r of allResults) {
+                                    const tr = document.createElement('tr');
+                                    tr.innerHTML = `
+                                        <td>${r.title || '—'}</td>
+                                        <td class="text-muted small">${r.rel_path || '—'}</td>
+                                        <td>${badgeFor(r.metadata_status)}</td>
+                                        <td>${badgeFor(r.cover_status)}</td>
+                                        <td>${overallBadge(r)}</td>`;
+                                    tbody.appendChild(tr);
+                                }
+                            }
+
+                            document.getElementById('export-results').classList.remove('d-none');
+                            document.getElementById('results-table').classList.remove('d-none');
+
+                        } else if (s.status === 'error') {
+                            clearInterval(poll);
+                            showError(s.error || 'ZIP export failed');
+                        }
+                    } catch (err) {
+                        clearInterval(poll);
+                        showError(err.message);
+                    }
+                }, 500);
             })
-            .catch(err => {
-                progressLabel.textContent = 'Error: ' + err.message;
-                progressBar.classList.remove('progress-bar-animated');
-                progressBar.classList.add('bg-danger');
-            });
+            .catch(err => showError(err.message));
     }
 
     btnZip.addEventListener('click', exportZip);

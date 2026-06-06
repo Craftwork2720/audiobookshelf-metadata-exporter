@@ -184,62 +184,82 @@ def _copy_file(source, destination):
         return f"Error: {e}", False
 
 
-def export_to_zip(items):
+def export_to_zip_stream(items, zip_path):
     """
-    Export metadata and cover files for selected items into a ZIP archive.
+    Generator that builds a ZIP archive item by item, yielding progress events.
 
-    Returns:
-        (zip_bytes_io, counts_dict, file_counts_dict, results_list)
+    Yields dicts with:
+      - type: "progress" | "error" | "done"
+      - For "progress": current, total, result (single item result)
+      - For "error": message
+      - For "done": counts, file_counts, zip_path
     """
-    buf = io.BytesIO()
+    total = len(items)
     counts = {"success": 0, "skipped": 0, "error": 0}
     metadata_count = 0
     cover_count = 0
-    results = []
 
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for item in items:
-            item_id = item["id"]
-            rel_path = item["rel_path"]
-            title = item.get("title", "")
+    try:
+        os.makedirs(os.path.dirname(zip_path), exist_ok=True)
+    except Exception as e:
+        yield {"type": "error", "message": f"Cannot create directory: {e}"}
+        return
 
-            source_dir = os.path.join(MEDIA_ROOT, str(item_id))
-            source_metadata = os.path.join(source_dir, "metadata.json")
-            source_cover = os.path.join(source_dir, "cover.jpg")
+    try:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for i, item in enumerate(items):
+                item_id = item["id"]
+                rel_path = item["rel_path"]
+                title = item.get("title", "")
 
-            has_metadata = os.path.isfile(source_metadata)
-            has_cover = os.path.isfile(source_cover)
+                source_dir = os.path.join(MEDIA_ROOT, str(item_id))
+                source_metadata = os.path.join(source_dir, "metadata.json")
+                source_cover = os.path.join(source_dir, "cover.jpg")
 
-            if not has_metadata and not has_cover:
-                counts["skipped"] += 1
-                results.append({
-                    "title": title, "rel_path": rel_path,
-                    "metadata_status": "Not found", "cover_status": "Not found",
-                    "overall_status": "Skipped", "overall_class": "skipped",
-                })
-                continue
+                has_metadata = os.path.isfile(source_metadata)
+                has_cover = os.path.isfile(source_cover)
 
-            meta_status = "Not found"
-            cover_status = "Not found"
+                if not has_metadata and not has_cover:
+                    counts["skipped"] += 1
+                    yield {
+                        "type": "progress", "current": i + 1, "total": total,
+                        "result": {
+                            "title": title, "rel_path": rel_path,
+                            "metadata_status": "Not found", "cover_status": "Not found",
+                            "overall_status": "Skipped", "overall_class": "skipped",
+                        },
+                    }
+                    continue
 
-            if has_metadata:
-                arcname = os.path.join(rel_path, "metadata.json")
-                zf.write(source_metadata, arcname)
-                metadata_count += 1
-                meta_status = "Copied"
+                meta_status = "Not found"
+                cover_status = "Not found"
 
-            if has_cover:
-                arcname = os.path.join(rel_path, "cover.jpg")
-                zf.write(source_cover, arcname)
-                cover_count += 1
-                cover_status = "Copied"
+                if has_metadata:
+                    zf.write(source_metadata, os.path.join(rel_path, "metadata.json"))
+                    metadata_count += 1
+                    meta_status = "Copied"
 
-            counts["success"] += 1
-            results.append({
-                "title": title, "rel_path": rel_path,
-                "metadata_status": meta_status, "cover_status": cover_status,
-                "overall_status": "OK", "overall_class": "success",
-            })
+                if has_cover:
+                    zf.write(source_cover, os.path.join(rel_path, "cover.jpg"))
+                    cover_count += 1
+                    cover_status = "Copied"
 
-    buf.seek(0)
-    return buf, counts, {"metadata": metadata_count, "cover": cover_count}, results
+                counts["success"] += 1
+                yield {
+                    "type": "progress", "current": i + 1, "total": total,
+                    "result": {
+                        "title": title, "rel_path": rel_path,
+                        "metadata_status": meta_status, "cover_status": cover_status,
+                        "overall_status": "OK", "overall_class": "success",
+                    },
+                }
+    except Exception as e:
+        yield {"type": "error", "message": str(e)}
+        return
+
+    yield {
+        "type": "done",
+        "counts": counts,
+        "file_counts": {"metadata": metadata_count, "cover": cover_count},
+        "zip_path": zip_path,
+    }

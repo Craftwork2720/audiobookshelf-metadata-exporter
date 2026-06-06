@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Select Library — Audiobookshelf Exporter{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-collection"></i> Select Library</h5>
+            </div>
+            <div class="card-body">
+                {% if libraries %}
+                    <form method="POST" action="{{ url_for('browse') }}">
+                        <div class="mb-3">
+                            <label for="library_id" class="form-label">Library</label>
+                            <select name="library_id" id="library_id" class="form-select" required>
+                                <option value="" disabled selected>Choose a library…</option>
+                                {% for lib in libraries %}
+                                    <option value="{{ lib.id }}">{{ lib.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-arrow-right-circle"></i> Browse Items
+                        </button>
+                    </form>
+                {% else %}
+                    <div class="alert alert-warning mb-0">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        No book libraries found. Check that the database is accessible.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

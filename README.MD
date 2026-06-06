@@ -1,134 +1,83 @@
-# Audiobookshelf Meta Exporter
+# Audiobookshelf Metadata Exporter
 
-Export metadata and cover images from your Audiobookshelf instance using Docker.
+A web tool to export `metadata.json` and `cover.jpg` files from your Audiobookshelf library to a chosen directory. Reads directly from Audiobookshelf's SQLite database — no CSV export step needed.
 
 ## Prerequisites
 
-- Docker and Docker Compose installed
-- Running Audiobookshelf instance
-- DB Browser for SQLite (or similar SQLite tool)
+- Docker and Docker Compose
+- A running Audiobookshelf instance with its `absdatabase.sqlite` file accessible
 
-## Setup Instructions
+## Quick Start
 
-### 1. Export Database Tables to CSV
+### 1. Set up volume mounts
 
-Using DB Browser for SQLite (or your preferred SQLite tool):
-
-1. Open your Audiobookshelf database file
-2. Export the following tables to CSV format:
-   - `libraries` → save as `libraries.csv`
-   - `libraryitems` → save as `libraryitems.csv`
-3. Place both CSV files in the `data/csv_db/` directory
-
-### 2. Copy Metadata Items Folder
-
-Copy the `/items` folder from your Audiobookshelf Docker container:
-```bash
-cp -r /path/to/audiobookshelf/metadata/items ./data/items
-```
-
-### 3. Create Required Directories
-
-Create the following directory structure:
-
-```
-├── data/
-│   ├── csv_db/
-│   │   ├── libraries.csv
-│   │   └── libraryitems.csv
-│   ├── items/
-│   │   └── [copied from audiobookshelf]
-│   └── exported/
-│       └── [exports will be placed here]
-├── docker-compose.yml
-└── README.md
-```
-
-Create the directories:
-```bash
-mkdir -p data/csv_db data/items data/exported
-```
-
-### 4. Docker Compose Configuration
-
-Create a `docker-compose.yml` file with the following content:
+Edit `docker-compose.yaml` and update the paths to match your Audiobookshelf installation:
 
 ```yaml
-services:
-  audiobookshelf-exporter:
-    image: ghcr.io/craftwork2720/audiobookshelf-meta-exporter:latest
-    container_name: audiobookshelf-exporter
-    ports:
-      - "8080:8080"
-    volumes:
-      - "./data/csv_db:/abs-data/csv_db:ro"
-      - "./data/items:/media/Audiobooks:ro"
-      - "./data/exported:/exported_audiobooks:rw"
-    environment:
-      PORT: 8080
-      # You can override default export path here if you want a different default in the UI
-      # ABS_EXPORT_DEFAULT_PATH: "/exported_audiobooks"
-    restart: unless-stopped
+volumes:
+  - "/path/to/audiobookshelf/config/absdatabase.sqlite:/config/absdatabase.sqlite:ro"
+  - "/path/to/audiobookshelf/metadata/items:/media/Audiobooks:ro"
+  - "./data/exported:/exported_audiobooks:rw"
 ```
 
-### 5. Access the Web Interface
+- **absdatabase.sqlite** — located in your Audiobookshelf config directory (typically `/config/absdatabase.sqlite` inside the ABS container)
+- **items** — the metadata items folder from your Audiobookshelf installation (typically `/metadata/items` inside the ABS container)
+- **exported** — where exported files will be written
 
-Open your browser and navigate to:
-```
-http://localhost:8080
+### 2. Create the export directory
+
+```bash
+mkdir -p data/exported
 ```
 
-From the web interface, you can:
-- Browse your audiobook library
-- Select items to export
-- Configure export settings
-- Download exported files
+### 3. Start the container
+
+```bash
+docker compose up -d
+```
+
+### 4. Open the web interface
+
+Navigate to [http://localhost:8080](http://localhost:8080).
 
 ## Usage
 
-1. **Access the interface**: Navigate to `http://localhost:8080`
-2. **Select library**: Choose a library from the dropdown menu
-3. **Enable folder comparison** (optional): Check the "Porównaj metadane z nazwami folderów" box to compare metadata with folder names
-4. **Browse and filter**: 
-   - Use the search box to filter audiobooks by title or author
-   - When folder comparison is enabled, use match filters to show only specific types of matches
-5. **Select items**: Choose which audiobooks you want to export using checkboxes
-6. **Set export path**: Specify the destination directory for exported files
-7. **Export**: Click "Eksportuj zaznaczone" to export selected audiobooks
-8. **Review results**: Check the export results table for any errors or issues
+1. **Select a library** from the dropdown on the home page
+2. **Browse items** — the table shows title, authors, series, published year, and path
+3. **Filter** using the search box or select/deselect all buttons
+4. **Set the export path** (defaults to `/exported_audiobooks`)
+5. **Click Export** — results show per-item status for `metadata.json` and `cover.jpg`
 
-## Features
+## Environment Variables
 
-### Folder Name Comparison
-The application can compare metadata from your Audiobookshelf database with actual folder names to help identify mismatches:
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `8080` | Web server port |
+| `ABS_DATABASE_PATH` | `/config/absdatabase.sqlite` | Path to Audiobookshelf SQLite database |
+| `ABS_MEDIA_ROOT` | `/media/Audiobooks` | Path to audiobook metadata/items folder |
+| `ABS_EXPORT_PATH` | `/exported_audiobooks` | Default export destination shown in UI |
+| `SECRET_KEY` | random | Flask secret key for session security |
 
-- **Full Match**: Both title and author match the folder name
-- **Title Only**: Only the title matches
-- **Authors Only**: Only the author matches  
-- **No Match**: Neither title nor author match
-- **Parse Error**: Unable to parse the folder name
+## Local Development (no Docker)
 
-### Folder Name Format Support
-The parser supports various folder naming conventions:
-- `Author - Title`
-- `Author - Title (Year)`
-- `Author - Title [audiobook]`
-- `Author - Title czyta Narrator`
-- `Author - Title tom 1`
-- `Author - Title cykl Series`
+```bash
+pip install -r requirements.txt
 
-## File Structure
+# Set paths to your local data
+export ABS_DATABASE_PATH="./data/absdatabase.sqlite"
+export ABS_MEDIA_ROOT="./data/items"
+export ABS_EXPORT_PATH="./data/exported"
 
+python app.py
 ```
-project-root/
-├── docker-compose.yml
-├── README.md
-└── data/
-    ├── csv_db/
-    │   ├── libraries.csv        # Exported from Audiobookshelf DB
-    │   └── libraryitems.csv     # Exported from Audiobookshelf DB
-    ├── items/                   # Copied from Audiobookshelf container
-    │   └── [metadata files]
-    └── exported/                # Export destination
-        └── [exported audiobooks will appear here]
+
+## Building the Docker Image
+
+```bash
+# Local build
+docker compose -f docker-compose-dev.yaml up --build
+
+# Multi-arch build (amd64 + arm64)
+docker buildx build . --platform linux/amd64,linux/arm64 --push \
+  -t ghcr.io/craftwork2720/audiobookshelf-meta-exporter:latest
 ```

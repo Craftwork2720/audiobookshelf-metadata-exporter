@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Export Results — Audiobookshelf Exporter{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-check2-square"></i> Export Results</h4>
+    <a href="{{ url_for('browse') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back to Library
+    </a>
+</div>
+
+{# Summary cards #}
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <div class="display-6">{{ results|length }}</div>
+                <div class="text-muted">Total Items</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <div class="display-6 text-success">{{ counts.success }}</div>
+                <div class="text-muted">Succeeded</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <div class="display-6 text-warning">{{ counts.skipped }}</div>
+                <div class="text-muted">Skipped</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <div class="display-6 text-danger">{{ counts.error }}</div>
+                <div class="text-muted">Errors</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# File copy stats #}
+<div class="alert alert-info mb-4">
+    <i class="bi bi-files"></i>
+    <strong>{{ file_counts.metadata }}</strong> metadata files and
+    <strong>{{ file_counts.cover }}</strong> cover images copied.
+</div>
+
+{# Results table #}
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Title</th>
+                <th>Path</th>
+                <th>metadata.json</th>
+                <th>cover.jpg</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in results %}
+            <tr>
+                <td>{{ r.title or '—' }}</td>
+                <td class="text-muted small">{{ r.rel_path or '—' }}</td>
+                <td>
+                    {% if r.metadata_status == 'Copied' %}
+                        <span class="badge bg-success">Copied</span>
+                    {% elif r.metadata_status == 'Already exists' %}
+                        <span class="badge bg-info">Exists</span>
+                    {% elif r.metadata_status == 'Not found' %}
+                        <span class="badge bg-secondary">Missing</span>
+                    {% else %}
+                        <span class="badge bg-danger">{{ r.metadata_status }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.cover_status == 'Copied' %}
+                        <span class="badge bg-success">Copied</span>
+                    {% elif r.cover_status == 'Already exists' %}
+                        <span class="badge bg-info">Exists</span>
+                    {% elif r.cover_status == 'Not found' %}
+                        <span class="badge bg-secondary">Missing</span>
+                    {% else %}
+                        <span class="badge bg-danger">{{ r.cover_status }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if r.overall_class == 'success' %}
+                        <span class="badge bg-success">OK</span>
+                    {% elif r.overall_class == 'error' %}
+                        <span class="badge bg-danger">{{ r.overall_status }}</span>
+                    {% elif r.overall_class == 'skipped' %}
+                        <span class="badge bg-warning text-dark">Skipped</span>
+                    {% else %}
+                        <span class="badge bg-info">{{ r.overall_status }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

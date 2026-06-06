@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}{{ library_name }} — Audiobookshelf Exporter{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4><i class="bi bi-collection"></i> {{ library_name }}</h4>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+<form method="POST" action="{{ url_for('export_items') }}" id="export-form">
+    <input type="hidden" name="library_id" value="{{ library_id }}">
+
+    {# Toolbar #}
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-center">
+                <div class="col-md-4">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="search-input" class="form-control" placeholder="Filter items…">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" class="btn btn-outline-primary" id="btn-select-all">Select All</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-deselect-all">Deselect All</button>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="bi bi-folder"></i> Export to</span>
+                        <input type="text" name="export_path" class="form-control"
+                               value="{{ default_export_path }}" required>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Items table #}
+    <div class="table-responsive">
+        <table class="table table-hover table-sm" id="items-table">
+            <thead class="table-light">
+                <tr>
+                    <th width="40"><input type="checkbox" id="check-all" class="form-check-input"></th>
+                    <th>Title</th>
+                    <th>Authors</th>
+                    <th>Series</th>
+                    <th>Published</th>
+                    <th>Path</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="item-row">
+                    <td>
+                        <input type="checkbox" name="item_ids" value="{{ item.id }}"
+                               class="form-check-input item-checkbox">
+                    </td>
+                    <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
+                    <td class="item-authors">{{ item.authors or '—' }}</td>
+                    <td class="item-series">{{ item.series or '—' }}</td>
+                    <td>{{ item.published_year or '—' }}</td>
+                    <td class="text-muted small">{{ item.rel_path }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if items %}
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-4">
+        <span class="text-muted" id="selection-count">0 selected</span>
+        <button type="submit" class="btn btn-success" id="btn-export" disabled>
+            <i class="bi bi-download"></i> Export Selected
+        </button>
+    </div>
+    {% else %}
+    <div class="alert alert-info">No items found in this library.</div>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    const checkAll = document.getElementById('check-all');
+    const searchInput = document.getElementById('search-input');
+    const selectionCount = document.getElementById('selection-count');
+    const btnExport = document.getElementById('btn-export');
+
+    function updateCount() {
+        const checked = document.querySelectorAll('.item-checkbox:checked').length;
+        selectionCount.textContent = checked + ' selected';
+        btnExport.disabled = checked === 0;
+    }
+
+    // Check all
+    checkAll.addEventListener('change', () => {
+        document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox')
+            .forEach(cb => { cb.checked = checkAll.checked; });
+        updateCount();
+    });
+
+    // Individual checkboxes
+    checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+
+    // Select/Deselect all buttons
+    document.getElementById('btn-select-all').addEventListener('click', () => {
+        document.querySelectorAll('.item-row:not([style*="display: none"]) .item-checkbox')
+            .forEach(cb => { cb.checked = true; });
+        checkAll.checked = true;
+        updateCount();
+    });
+    document.getElementById('btn-deselect-all').addEventListener('click', () => {
+        checkboxes.forEach(cb => { cb.checked = false; });
+        checkAll.checked = false;
+        updateCount();
+    });
+
+    // Search filter
+    searchInput.addEventListener('input', () => {
+        const q = searchInput.value.toLowerCase();
+        document.querySelectorAll('.item-row').forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(q) ? '' : 'none';
+        });
+    });
+</script>
+{% endblock %}

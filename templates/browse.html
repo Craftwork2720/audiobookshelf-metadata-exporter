@@ -221,21 +221,44 @@
         const jobId = startData.job_id;
 
         // 2. Poll status every 500ms
+        const tbody = document.getElementById('results-body');
+        tbody.innerHTML = '';
+        let resultsStarted = false;
+
         const poll = setInterval(async () => {
             try {
                 const s = await fetch(`/export/status/${jobId}`).then(r => r.json());
 
-                if (s.error) { clearInterval(poll); showError(s.error); return; }
+                if (s.error && s.status !== 'done') { clearInterval(poll); showError(s.error); return; }
 
+                // Update progress bar
                 const pct = s.total ? Math.round((s.current / s.total) * 100) : 0;
                 progressBar.style.width = pct + '%';
                 progressBar.textContent = pct + '%';
                 progressCount.textContent = s.current + ' / ' + s.total;
 
+                // Append new result rows incrementally
+                if (s.new_results && s.new_results.length > 0) {
+                    if (!resultsStarted) {
+                        document.getElementById('export-results').classList.remove('d-none');
+                        document.getElementById('results-table').classList.remove('d-none');
+                        resultsStarted = true;
+                    }
+                    for (const r of s.new_results) {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${r.title || '—'}</td>
+                            <td class="text-muted small">${r.rel_path || '—'}</td>
+                            <td>${badgeFor(r.metadata_status)}</td>
+                            <td>${badgeFor(r.cover_status)}</td>
+                            <td>${overallBadge(r)}</td>`;
+                        tbody.appendChild(tr);
+                    }
+                }
+
                 if (s.status === 'done') {
                     clearInterval(poll);
-                    const res = await fetch(`/export/result/${jobId}`).then(r => r.json());
-                    finishExport(res.results, res.counts, res.file_counts);
+                    finishExport(s.counts, s.file_counts);
                 } else if (s.status === 'error') {
                     clearInterval(poll);
                     showError(s.error || 'Export failed');
@@ -247,7 +270,7 @@
         }, 500);
     });
 
-    function finishExport(results, counts, fileCounts) {
+    function finishExport(counts, fileCounts) {
         const progressBar = document.getElementById('progress-bar');
         const progressLabel = document.getElementById('progress-label');
 
@@ -257,7 +280,7 @@
         progressBar.classList.add('bg-success');
         progressLabel.textContent = 'Export complete!';
 
-        // Show summary
+        // Show summary cards
         if (counts) {
             const total = counts.success + counts.skipped + counts.error;
             const summary = document.getElementById('results-summary');
@@ -283,37 +306,6 @@
                 summary.after(alert);
             }
         }
-
-        // Show issues table (only non-success results)
-        const tbody = document.getElementById('results-body');
-        const tableEl = document.getElementById('results-table');
-        tbody.innerHTML = '';
-
-        if (!results || results.length === 0) {
-            tableEl.classList.add('d-none');
-            const successAlert = document.createElement('div');
-            successAlert.className = 'alert alert-success';
-            successAlert.innerHTML = '<i class="bi bi-check-circle"></i> All items exported successfully.';
-            document.getElementById('export-results').appendChild(successAlert);
-        } else {
-            tableEl.classList.remove('d-none');
-            const note = document.createElement('div');
-            note.className = 'text-muted small mb-2';
-            note.textContent = `${counts.success} succeeded, showing ${results.length} issues:`;
-            document.getElementById('export-results').insertBefore(note, tableEl);
-            for (const r of results) {
-                const metaBadge = badgeFor(r.metadata_status);
-                const coverBadge = badgeFor(r.cover_status);
-                const statusBadge = overallBadge(r);
-                tbody.innerHTML += `<tr>
-                    <td>${r.title || '—'}</td>
-                    <td class="text-muted small">${r.rel_path || '—'}</td>
-                    <td>${metaBadge}</td><td>${coverBadge}</td><td>${statusBadge}</td>
-                </tr>`;
-            }
-        }
-
-        document.getElementById('export-results').classList.remove('d-none');
     }
 
     function badgeFor(status) {

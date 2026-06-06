@@ -87,6 +87,7 @@ def export_start():
         "current": 0,
         "total": len(selected_items),
         "results": [],
+        "results_offset": 0,
         "counts": {"success": 0, "skipped": 0, "error": 0},
         "file_counts": {"metadata": 0, "cover": 0},
     }
@@ -99,9 +100,7 @@ def export_start():
                 if event["type"] == "progress":
                     job["current"] = event["current"]
                     job["total"] = event["total"]
-                    r = event["result"]
-                    if r.get("overall_class") != "success":
-                        job["results"].append(r)
+                    job["results"].append(event["result"])
                 elif event["type"] == "done":
                     job["counts"] = event["counts"]
                     job["file_counts"] = event["file_counts"]
@@ -116,32 +115,24 @@ def export_start():
 
 @app.route("/export/status/<job_id>")
 def export_status(job_id):
-    """Poll export progress."""
+    """Poll export progress — returns a batch of new results each call."""
     with jobs_lock:
         job = jobs.get(job_id)
     if not job:
         return {"error": "Job not found"}, 404
+
+    offset = job["results_offset"]
+    batch = job["results"][offset:offset + 50]
+    job["results_offset"] = offset + len(batch)
+
     return {
         "status": job["status"],
         "current": job["current"],
         "total": job["total"],
-        "error": job.get("error"),
-    }
-
-
-@app.route("/export/result/<job_id>")
-def export_result(job_id):
-    """Get final export results."""
-    with jobs_lock:
-        job = jobs.get(job_id)
-    if not job:
-        return {"error": "Job not found"}, 404
-    if job["status"] != "done":
-        return {"error": "Not finished yet"}, 400
-    return {
-        "results": job["results"],
         "counts": job["counts"],
         "file_counts": job["file_counts"],
+        "new_results": batch,
+        "error": job.get("error"),
     }
 
 

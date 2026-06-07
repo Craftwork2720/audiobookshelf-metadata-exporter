@@ -131,12 +131,13 @@
                         <input type="checkbox" name="item_ids" value="{{ item.id }}"
                                class="form-check-input item-checkbox">
                     </td>
-                    <td class="item-title">{{ item.title or item.book_title or '—' }}</td>
-                    <td class="item-authors{% if matcher_enabled and m.author_score is not none and m.author_score < 0.55 %} table-danger{% endif %}"
-                        {% if matcher_enabled and m.author_score is not none %}title="Author match: {{ m.author_score }}"{% endif %}>
+                    <td class="item-title" data-color-for="{{ item.title or item.book_title or '' }}">{{ item.title or item.book_title or '—' }}</td>
+                    <td class="item-authors" data-color-for="{{ item.authors or '' }}">
                         {{ item.authors or '—' }}
                     </td>
-                    <td class="text-muted small">{{ item.rel_path }}</td>
+                    <td class="text-muted small item-path"
+                        data-path-color-author="{{ item.authors or '' }}"
+                        data-path-color-title="{{ item.title or item.book_title or '' }}">{{ item.rel_path }}</td>
                     {% if matcher_enabled %}
                     <td>
                         {% if m.status == 'match' %}
@@ -199,6 +200,61 @@
     const btnZipTop = document.getElementById('btn-zip-top');
     const exportForm = document.getElementById('export-form');
     const matcherEnabled = '{{ "true" if matcher_enabled else "false" }}' === 'true';
+
+    // --- Color coding for titles and authors ---
+    function hashCode(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+        }
+        return Math.abs(hash);
+    }
+
+    function stringToColor(str) {
+        if (!str || str === '—') return '';
+        const h = hashCode(str);
+        const hue = h % 360;
+        return `hsl(${hue}, 55%, 35%)`;
+    }
+
+    document.querySelectorAll('[data-color-for]').forEach(el => {
+        const text = el.dataset.colorFor;
+        const color = stringToColor(text);
+        if (color) el.style.color = color;
+    });
+
+    // Color path segments to match author and title
+    document.querySelectorAll('.item-path').forEach(el => {
+        const path = el.textContent.trim();
+        const author = el.dataset.pathColorAuthor;
+        const title = el.dataset.pathColorTitle;
+        const authorColor = stringToColor(author);
+        const titleColor = stringToColor(title);
+
+        if (!path || (!authorColor && !titleColor)) return;
+
+        // Escape regex special chars
+        function escRegex(s) {
+            return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        let html = path;
+
+        // Try to find and color the author in the path
+        if (author && authorColor && author.length >= 3) {
+            const authorRe = new RegExp(escRegex(author), 'i');
+            html = html.replace(authorRe, match => `<span style="color:${authorColor}">${match}</span>`);
+        }
+
+        // Try to find and color the title in the path
+        if (title && titleColor && title.length >= 3) {
+            const titleRe = new RegExp(escRegex(title), 'i');
+            html = html.replace(titleRe, match => `<span style="color:${titleColor}">${match}</span>`);
+        }
+
+        el.innerHTML = html;
+    });
 
     // --- State ---
     let currentSort = { col: 2, asc: false };

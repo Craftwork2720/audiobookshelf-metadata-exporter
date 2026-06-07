@@ -42,6 +42,7 @@ def get_items_by_library(library_id):
             b.title          AS book_title,
             b.publishedYear  AS published_year,
             b.narrators      AS narrators,
+            b.updatedAt      AS updated_at,
             li.authorNamesFirstLast AS authors,
             GROUP_CONCAT(
                 CASE WHEN s.name IS NOT NULL

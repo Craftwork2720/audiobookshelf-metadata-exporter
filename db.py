@@ -30,9 +30,9 @@ def get_book_libraries():
 
 def get_items_by_library(library_id):
     """
-    Return book items for a library with authors and series info.
+    Return book items for a library with authors info.
 
-    Each item: {id, rel_path, title, authors, series, series_sequence}
+    Each item: {id, rel_path, title, authors}
     """
     query = """
         SELECT
@@ -40,26 +40,12 @@ def get_items_by_library(library_id):
             li.relPath       AS rel_path,
             li.title         AS title,
             b.title          AS book_title,
-            b.publishedYear  AS published_year,
-            b.narrators      AS narrators,
-            b.updatedAt      AS updated_at,
-            li.authorNamesFirstLast AS authors,
-            GROUP_CONCAT(
-                CASE WHEN s.name IS NOT NULL
-                    THEN s.name || ' #' || COALESCE(bs.sequence, '?')
-                    ELSE NULL
-                END, ', '
-            ) AS series
+            li.authorNamesFirstLast AS authors
         FROM libraryItems li
         JOIN books b ON b.id = li.mediaId
-        LEFT JOIN bookAuthors ba ON ba.bookId = b.id
-        LEFT JOIN authors a ON a.id = ba.authorId
-        LEFT JOIN bookSeries bs ON bs.bookId = b.id
-        LEFT JOIN series s ON s.id = bs.seriesId
         WHERE li.libraryId = ?
           AND li.mediaType = 'book'
           AND li.isMissing = 0
-        GROUP BY li.id
         ORDER BY li.titleIgnorePrefix
     """
     with _get_connection() as conn:

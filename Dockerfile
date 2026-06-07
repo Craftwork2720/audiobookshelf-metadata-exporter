@@ -1,5 +1,8 @@
 FROM python:3.13-slim-bookworm
 
+LABEL org.opencontainers.image.source="https://github.com/Craftwork2720/audiobookshelf-metadata-exporter"
+LABEL org.opencontainers.image.url="https://github.com/Craftwork2720/audiobookshelf-metadata-exporter"
+
 # Audiobookshelf DB uses trigger syntax requiring SQLite >= 3.45.
 # Bookworm ships 3.40, so pull the newer libsqlite3 from trixie.
 RUN echo "deb http://deb.debian.org/debian trixie main" >> /etc/apt/sources.list \

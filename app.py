@@ -6,6 +6,7 @@ metadata.json / cover.jpg files to a specified directory.
 """
 
 import importlib.util
+import json
 import os
 import threading
 import uuid
@@ -26,6 +27,21 @@ else:
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(24)
+
+# Version from package.json
+def _load_version():
+    pkg_path = os.path.join(os.path.dirname(__file__), "package.json")
+    try:
+        with open(pkg_path) as f:
+            return json.load(f).get("version", "0.0.0")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return "0.0.0"
+
+APP_VERSION = _load_version()
+
+@app.context_processor
+def inject_version():
+    return {"app_version": APP_VERSION}
 
 DEFAULT_EXPORT_PATH = os.environ.get("EXPORT_PATH", "/exported")
 MATCHER_ENABLED = os.environ.get("MATCHER_ENABLED", "false").lower() in ("true", "1", "yes")
